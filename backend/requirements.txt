@@ -1,0 +1,12 @@
+# Runtime dependencies for the NeuralShot backend.
+fastapi>=0.142,<1.0
+uvicorn[standard]>=0.54,<1.0
+pydantic>=2.13,<3.0
+pydantic-settings>=2.15,<3.0
+sqlalchemy[asyncio]>=2.1,<2.2
+alembic>=1.20,<2.0
+aiosqlite>=0.22,<1.0
+argon2-cffi>=25.1,<26.0
+pyjwt>=2.15,<3.0
+httpx>=0.28,<1.0
+websockets>=17.0,<18.0

@@ -1,0 +1,107 @@
+/*
+ * NeuralShot design tokens.
+ * Every color used by components comes from here — never hardcode hex values in components.
+ * Dark is the default theme; light mode overrides the same variables.
+ */
+:root,
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  /* Surfaces: black / graphite with deep navy undertone */
+  --ns-bg: #05070d;
+  --ns-bg-elevated: #090d17;
+  --ns-surface: rgb(13 19 33 / 0.72);
+  --ns-surface-strong: #0d1322;
+  --ns-surface-hover: rgb(148 163 184 / 0.06);
+  --ns-surface-sunken: rgb(2 4 10 / 0.55);
+  --ns-border: rgb(148 163 184 / 0.09);
+  --ns-border-strong: rgb(148 163 184 / 0.18);
+
+  /* Text */
+  --ns-fg: #e6ecf5;
+  --ns-fg-muted: #8a97ac;
+  --ns-fg-subtle: #566279;
+
+  /* Accents */
+  --ns-accent: #22d3ee; /* electric cyan */
+  --ns-accent-strong: #06b6d4;
+  --ns-accent-soft: rgb(34 211 238 / 0.12);
+  --ns-accent-fg: #021016;
+  --ns-violet: #a78bfa; /* restrained purple */
+  --ns-violet-soft: rgb(167 139 250 / 0.12);
+
+  /* Market states */
+  --ns-bull: #10b981;
+  --ns-bull-soft: rgb(16 185 129 / 0.14);
+  --ns-bear: #e5484d;
+  --ns-bear-soft: rgb(229 72 77 / 0.14);
+  --ns-neutral: #7d8ca3;
+  --ns-neutral-soft: rgb(125 140 163 / 0.14);
+  --ns-warning: #f5a524;
+  --ns-warning-soft: rgb(245 165 36 / 0.14);
+
+  /* Depth */
+  --ns-shadow-panel: inset 0 1px 0 rgb(255 255 255 / 0.03), 0 18px 40px -24px rgb(0 0 0 / 0.85);
+  --ns-shadow-pop: 0 24px 60px -20px rgb(0 0 0 / 0.9), 0 0 0 1px rgb(148 163 184 / 0.12);
+  --ns-glow-accent: 0 0 0 1px rgb(34 211 238 / 0.28), 0 0 22px -6px rgb(34 211 238 / 0.45);
+  --ns-backdrop-a: rgb(30 58 138 / 0.22);
+  --ns-backdrop-b: rgb(91 33 182 / 0.1);
+  --ns-node: rgb(34 211 238 / 0.55);
+  --ns-node-line: rgb(34 211 238 / 0.12);
+
+  /* Charts (read at runtime by the chart theme adapter) */
+  --ns-chart-bg: transparent;
+  --ns-chart-text: #7f8ca2;
+  --ns-chart-grid: rgb(148 163 184 / 0.06);
+  --ns-chart-border: rgb(148 163 184 / 0.12);
+  --ns-chart-crosshair: rgb(34 211 238 / 0.45);
+  --ns-chart-crosshair-label: #0f2a33;
+}
+
+[data-theme='light'] {
+  color-scheme: light;
+
+  --ns-bg: #eef1f7;
+  --ns-bg-elevated: #f7f9fc;
+  --ns-surface: rgb(255 255 255 / 0.78);
+  --ns-surface-strong: #ffffff;
+  --ns-surface-hover: rgb(15 23 42 / 0.04);
+  --ns-surface-sunken: rgb(226 232 240 / 0.6);
+  --ns-border: rgb(15 23 42 / 0.08);
+  --ns-border-strong: rgb(15 23 42 / 0.16);
+
+  --ns-fg: #0d1526;
+  --ns-fg-muted: #4b5870;
+  --ns-fg-subtle: #8090a8;
+
+  --ns-accent: #0891b2;
+  --ns-accent-strong: #0e7490;
+  --ns-accent-soft: rgb(8 145 178 / 0.1);
+  --ns-accent-fg: #ffffff;
+  --ns-violet: #7c3aed;
+  --ns-violet-soft: rgb(124 58 237 / 0.08);
+
+  --ns-bull: #059669;
+  --ns-bull-soft: rgb(5 150 105 / 0.1);
+  --ns-bear: #d92d3a;
+  --ns-bear-soft: rgb(217 45 58 / 0.1);
+  --ns-neutral: #64748b;
+  --ns-neutral-soft: rgb(100 116 139 / 0.1);
+  --ns-warning: #c27803;
+  --ns-warning-soft: rgb(194 120 3 / 0.1);
+
+  --ns-shadow-panel: 0 1px 2px rgb(15 23 42 / 0.04), 0 12px 32px -20px rgb(15 23 42 / 0.25);
+  --ns-shadow-pop: 0 24px 48px -16px rgb(15 23 42 / 0.25), 0 0 0 1px rgb(15 23 42 / 0.08);
+  --ns-glow-accent: 0 0 0 1px rgb(8 145 178 / 0.3), 0 0 18px -6px rgb(8 145 178 / 0.35);
+  --ns-backdrop-a: rgb(59 130 246 / 0.08);
+  --ns-backdrop-b: rgb(124 58 237 / 0.05);
+  --ns-node: rgb(8 145 178 / 0.5);
+  --ns-node-line: rgb(8 145 178 / 0.14);
+
+  --ns-chart-bg: transparent;
+  --ns-chart-text: #5b6880;
+  --ns-chart-grid: rgb(15 23 42 / 0.05);
+  --ns-chart-border: rgb(15 23 42 / 0.1);
+  --ns-chart-crosshair: rgb(8 145 178 / 0.5);
+  --ns-chart-crosshair-label: #0e7490;
+}

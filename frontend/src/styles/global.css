@@ -1,0 +1,111 @@
+@import '@fontsource/ibm-plex-sans-arabic/400.css';
+@import '@fontsource/ibm-plex-sans-arabic/500.css';
+@import '@fontsource/ibm-plex-sans-arabic/600.css';
+@import '@fontsource/ibm-plex-sans-arabic/700.css';
+@import '@fontsource/ibm-plex-mono/400.css';
+@import '@fontsource/ibm-plex-mono/500.css';
+@import 'tailwindcss';
+@import './tokens.css';
+
+@custom-variant light (&:where([data-theme='light'], [data-theme='light'] *));
+
+/* Map design tokens into Tailwind utilities (bg-surface, text-fg-muted, border-line, ...). */
+@theme inline {
+  --color-bg: var(--ns-bg);
+  --color-elevated: var(--ns-bg-elevated);
+  --color-surface: var(--ns-surface);
+  --color-surface-strong: var(--ns-surface-strong);
+  --color-surface-hover: var(--ns-surface-hover);
+  --color-sunken: var(--ns-surface-sunken);
+  --color-line: var(--ns-border);
+  --color-line-strong: var(--ns-border-strong);
+  --color-fg: var(--ns-fg);
+  --color-fg-muted: var(--ns-fg-muted);
+  --color-fg-subtle: var(--ns-fg-subtle);
+  --color-accent: var(--ns-accent);
+  --color-accent-strong: var(--ns-accent-strong);
+  --color-accent-soft: var(--ns-accent-soft);
+  --color-accent-fg: var(--ns-accent-fg);
+  --color-violet: var(--ns-violet);
+  --color-violet-soft: var(--ns-violet-soft);
+  --color-bull: var(--ns-bull);
+  --color-bull-soft: var(--ns-bull-soft);
+  --color-bear: var(--ns-bear);
+  --color-bear-soft: var(--ns-bear-soft);
+  --color-neutral: var(--ns-neutral);
+  --color-neutral-soft: var(--ns-neutral-soft);
+  --color-warning: var(--ns-warning);
+  --color-warning-soft: var(--ns-warning-soft);
+
+  --shadow-panel: var(--ns-shadow-panel);
+  --shadow-pop: var(--ns-shadow-pop);
+  --shadow-glow: var(--ns-glow-accent);
+}
+
+@theme {
+  --font-sans:
+    'IBM Plex Sans Arabic', system-ui, -apple-system, 'Segoe UI', Tahoma, 'Noto Sans Arabic',
+    sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-bg text-fg font-sans antialiased;
+    font-feature-settings: 'kern';
+    background-image:
+      radial-gradient(1200px 600px at 85% -10%, var(--ns-backdrop-a), transparent 60%),
+      radial-gradient(900px 500px at 0% 110%, var(--ns-backdrop-b), transparent 60%);
+    background-attachment: fixed;
+  }
+
+  ::selection {
+    background: var(--ns-accent-soft);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ns-accent);
+    outline-offset: 2px;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--ns-border-strong) transparent;
+  }
+}
+
+@layer components {
+  /* Soft glass panel */
+  .ns-panel {
+    @apply bg-surface border-line shadow-panel rounded-xl border backdrop-blur-xl;
+  }
+
+  /* Latin financial tokens (BTCUSDT, EMA, TP, SL, R:R, prices) inside RTL text */
+  .ns-ltr {
+    direction: ltr;
+    unicode-bidi: isolate;
+  }
+
+  .ns-num {
+    @apply font-mono tabular-nums;
+    direction: ltr;
+    unicode-bidi: isolate;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
