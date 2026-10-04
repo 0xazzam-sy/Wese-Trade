@@ -201,7 +201,9 @@ async def test_seed_evaluation_is_display_only_and_withholds_trades(
     # A non-NEUTRAL seed result is never shown or tracked: no live signal was issued for it.
     stream.current, stream.seed_pending = None, True
     # (a 15m-like trade passes the timeframe policy unchanged, so only the seed rule acts)
-    trade = SimpleNamespace(is_trade=True, signal_class=SignalClass.BUY, timeframe="15m")
+    trade = SimpleNamespace(
+        is_trade=True, signal_class=SignalClass.BUY, timeframe="15m", hypothesis=None
+    )
     monkeypatch.setattr("app.signal_engine.service.evaluate_closed", lambda *a, **k: trade)
     before = len(publisher.of_type("signal.updated", "c1"))
     signals._try_seed(stream, force=True)

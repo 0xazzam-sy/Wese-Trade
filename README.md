@@ -15,12 +15,16 @@ using **OKX public market data**.
 
 **Current status: Phase 4.1 complete (signal-edge research, walk-forward validation, strategy validation status).**
 
-> **Read this before using signals.** The historical validation of the current signal
-> engine did **not** show a positive expectancy after fees and slippage (holdout: 298
-> trades, −0.126 R per trade, profit factor 0.80), and the signal-strength score is not
-> calibrated. Signals are analytical descriptions of rule-based setups, **not**
-> recommendations: «الإشارات تحليلية وليست ضماناً للربح.» Details:
-> [`docs/backtesting.md`](docs/backtesting.md).
+> **Read this before using signals.** Phase 4.1 walk-forward research found **no robust edge**.
+> - 12 liquid OKX perpetuals, 3 chronological validation windows.
+> - Baseline: −0.077 R per trade over 2,605 validation trades. No pre-registered candidate passed.
+>
+> The strategy is shown as «تجريبي · غير مُثبت».
+> - Directional signals only on 15m/30m/1h, and never from the reversal or breakout setups.
+> - 1m, 5m and 10m are research-only.
+>
+> Signals are analytical, **not** recommendations: «الإشارات تحليلية وليست ضماناً للربح.»
+> Details: [`docs/research.md`](docs/research.md).
 
 Phase 1 (foundation) provides:
 

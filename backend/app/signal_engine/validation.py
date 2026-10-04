@@ -54,6 +54,7 @@ TRANSITIONS: dict[ValidationStatus, frozenset[ValidationStatus]] = {
 }
 
 RESEARCH_ONLY_REASON = "إطار زمني للبحث فقط — لا إشارات اتجاهية لهذا الإطار"
+DISABLED_FAMILY_REASON = "نوع إعداد تجريبي معطّل للإشارات — لم يُظهر أفضلية في البحث"
 
 
 class InvalidTransitionError(ValueError):
@@ -74,17 +75,25 @@ class StrategyDeployment:
     signal_timeframes: frozenset[str]  # directional live signals allowed here
     note_ar: str
     evidence: str  # where the decision is documented
+    # Families kept in the engine (still evaluated, visible in details) but never emitted
+    # as directional signals: EXPERIMENTAL / DISABLED_FOR_SIGNALS (docs/research.md).
+    disabled_families: frozenset[str] = frozenset()
 
     def signal_capable(self, timeframe: str) -> bool:
         return self.status is not ValidationStatus.REJECTED and timeframe in self.signal_timeframes
 
     def apply(self, ev: SignalEvaluation) -> SignalEvaluation:
-        """Downgrade a directional evaluation on a research-only timeframe (pure)."""
-        if ev.signal_class is SignalClass.NEUTRAL or self.signal_capable(ev.timeframe):
+        """Downgrade a directional evaluation on a research-only timeframe or from a
+        disabled family (pure; the hypothesis stays attached for transparency)."""
+        if ev.signal_class is SignalClass.NEUTRAL:
             return ev
-        return replace(
-            ev, signal_class=SignalClass.NEUTRAL, side=None, neutral_reason=RESEARCH_ONLY_REASON
-        )
+        if not self.signal_capable(ev.timeframe):
+            reason = RESEARCH_ONLY_REASON
+        elif ev.hypothesis is not None and ev.hypothesis.family.value in self.disabled_families:
+            reason = DISABLED_FAMILY_REASON
+        else:
+            return ev
+        return replace(ev, signal_class=SignalClass.NEUTRAL, side=None, neutral_reason=reason)
 
     def info(self, timeframe: str) -> dict[str, Any]:
         return {
@@ -99,10 +108,12 @@ class StrategyDeployment:
 
 
 # The frozen Phase 4 baseline. Phase 4.1 walk-forward research found no robust edge
-# (docs/research.md), so it stays UNPROVEN / experimental. 1m and 10m are research-only
-# (costs exceed practical risk on 1m; 10m duplicates 5m/15m information). 5m is
-# research-only because ~90% of its structural plans cannot clear the cost floor and its
-# validation results were negative.
+# (docs/research.md), so it stays UNPROVEN / experimental:
+# * 1m: structurally unsuitable (98.5% of structural plans cannot clear the cost floor);
+# * 5m: negative in every validation window (-0.125R baseline, -0.046R trend-only);
+# * 10m: research-only (anchors only, failed acceptance);
+# * LIQUIDITY_REVERSAL and BREAKOUT_CONTINUATION: negative in the pre-period and in every
+#   validation window (breakout negative even before costs) -> disabled for signals.
 PHASE4_BASELINE = StrategyDeployment(
     version=strategy_version(DEFAULT_SIGNAL_CONFIG),
     status=ValidationStatus.UNPROVEN,
@@ -110,6 +121,31 @@ PHASE4_BASELINE = StrategyDeployment(
     signal_timeframes=frozenset({"15m", "30m", "1h"}),
     note_ar="استراتيجية تجريبية لم تُثبت أفضلية تاريخية بعد التكاليف — ليست توصية.",
     evidence="docs/research.md",
+    disabled_families=frozenset({"LIQUIDITY_REVERSAL", "BREAKOUT_CONTINUATION"}),
 )
 
 ACTIVE_DEPLOYMENT = PHASE4_BASELINE
+
+
+@dataclass(frozen=True, slots=True)
+class ResearchCandidate:
+    """A research strategy version under study. Never emitted live while TESTING."""
+
+    version: str
+    status: ValidationStatus
+    definition: str
+    verdict: str
+
+
+# Exploratory post-hoc candidate (docs/research.md §8): positive in W1-W3 but its grid was
+# designed after seeing those windows and it was NEGATIVE in the pre-period. It stays
+# TESTING until it passes a prospective test on data after 2026-10-04.
+RESEARCH_CANDIDATES = (
+    ResearchCandidate(
+        version="wese-trade-research-4.1-c590e82e3a",
+        status=ValidationStatus.TESTING,
+        definition="TREND_CONTINUATION only, 15m/30m/1h, threshold 75, no range/transitional, "
+        "retrace entry (confirmation-candle midpoint limit), runner exit (1/2 TP1, 1/2 TP3)",
+        verdict="not promoted: post-hoc design, negative pre-period (-0.068R, n=252)",
+    ),
+)

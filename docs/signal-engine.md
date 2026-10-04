@@ -312,6 +312,12 @@ passed_historical→{forward_test, rejected}; forward_test→rejected; rejected�
   allowed only on its policy timeframes (**15m, 30m, 1h**).
 - On **1m, 5m and 10m** the engine still evaluates and shows its reasoning, but a BUY/SELL
   becomes NEUTRAL with «إطار زمني للبحث فقط — لا إشارات اتجاهية لهذا الإطار».
+- **LIQUIDITY_REVERSAL and BREAKOUT_CONTINUATION** are EXPERIMENTAL / DISABLED_FOR_SIGNALS.
+  They are evaluated and visible in the details drawer, but shown as NEUTRAL with «نوع إعداد
+  تجريبي معطّل للإشارات — لم يُظهر أفضلية في البحث». Both were negative in every walk-forward
+  window, and breakout was negative even before costs.
+- Research candidates (`RESEARCH_CANDIDATES`) are recorded with status `testing` and are never
+  emitted live.
 - Every `signal.*` event, the REST state and `/signals/health` carry
   `strategy: {version, status, status_ar, label_ar, forward_test, signal_capable, note_ar}`.
 - The panel always shows the status badge («تجريبي · غير مُثبت» or «اختبار مباشر»), plus a

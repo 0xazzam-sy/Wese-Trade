@@ -99,3 +99,23 @@ def test_rejected_strategy_has_no_signal_timeframes_and_forward_test_flag() -> N
     info = forward.info("1h")
     assert info["forward_test"] is True and info["status_ar"] == "اختبار مباشر"
     assert PHASE4_BASELINE.info("1h")["forward_test"] is False
+
+
+def test_disabled_families_never_emit_directional_signals() -> None:
+    from app.signal_engine.enums import SetupFamily
+    from app.signal_engine.validation import DISABLED_FAMILY_REASON, RESEARCH_CANDIDATES
+    from tests.research.test_research import _hyp
+
+    for family, emitted in (
+        (SetupFamily.LIQUIDITY_REVERSAL, False),
+        (SetupFamily.BREAKOUT_CONTINUATION, False),
+        (SetupFamily.TREND_CONTINUATION, True),
+        (SetupFamily.PULLBACK_CONTINUATION, True),
+    ):
+        hyp = replace(_hyp({"htf": 1.0}, {}), family=family)
+        out = PHASE4_BASELINE.apply(replace(_ev("1h"), hypothesis=hyp))
+        assert (out.signal_class is SignalClass.BUY) is emitted
+        if not emitted:
+            assert out.neutral_reason == DISABLED_FAMILY_REASON and out.hypothesis is hyp
+    # research candidates are never live while testing
+    assert all(c.status is S.TESTING for c in RESEARCH_CANDIDATES)
