@@ -26,7 +26,7 @@ from app.analysis.series import Bar
 from app.market_data.timeframes import Timeframe
 from app.research.collect import SeriesResearch
 from app.signal_engine.config import SignalConfig
-from app.signal_engine.enums import ExitReason, Side, SignalState
+from app.signal_engine.enums import EntryModel, ExitReason, Side, SignalState
 from app.signal_engine.lifecycle import compute_r
 from app.signal_engine.models import Signal
 
@@ -38,12 +38,12 @@ class LtfEvent:
     direction: str  # bullish | bearish
 
 
-def choch_events(ltf: SeriesResearch) -> list[LtfEvent]:
-    """Internal CHoCH events confirmed on each 5m candle (from the recorded triggers)."""
+def choch_events(ltf: SeriesResearch, kinds: tuple[str, ...] = ("CHOCH",)) -> list[LtfEvent]:
+    """Internal structure events confirmed on each 5m candle (from the recorded triggers)."""
     out = []
     for t in ltf.triggers:
         for layer, kind, direction in t.events:
-            if layer == "internal" and kind == "CHOCH":
+            if layer == "internal" and kind in kinds:
                 out.append(LtfEvent(t.close_time, t.index, direction))
     return out
 
@@ -100,11 +100,19 @@ def ltf_entries(
     ltf: SeriesResearch,
     htf: Timeframe,
     cfg: SignalConfig,
+    *,
+    pullback_levels: dict[int, float] | None = None,
 ) -> tuple[list[Signal], list[Signal], dict[str, int]]:
-    """(A5 trades, D5 trades, counts) for HTF signals that were entered at market."""
+    """(A5 trades, D5 trades, counts) for HTF signals that were entered at market.
+
+    Default D5: first aligned 5m internal CHoCH confirmed after T.
+    With `pullback_levels` ({confirmation close time: HTF confirmation-candle midpoint}):
+    first wait for a 5m candle trading back to that midpoint, THEN take the first aligned
+    5m internal BOS or CHoCH confirmed after that pullback candle (internal recovery).
+    """
     bars = ltf.bars
     closes = [b.close_time for b in bars]
-    events = choch_events(ltf)
+    events = choch_events(ltf, ("CHOCH",) if pullback_levels is None else ("CHOCH", "BOS"))
     ev_times = [e.close_time for e in events]
     expiry = cfg.entry_expiry_bars * htf.seconds
     hold = cfg.max_hold_bars * htf.seconds
@@ -121,6 +129,9 @@ def ltf_entries(
     for sig in signals:
         if not sig.entered or sig.entry_price is None:
             continue
+        if sig.plan.entry_model is not EntryModel.MARKET:
+            counts["skipped_zone_entry"] += 1  # thesis already uses a limit entry
+            continue
         counts["htf_signals"] += 1
         t = sig.confirmed_time
         start = bisect_right(closes, t)  # first 5m bar CLOSING after T
@@ -130,7 +141,21 @@ def ltf_entries(
         a5.append(manage(sig, bars, start, sig.plan.preferred_entry, t + hold, cfg))
         sign = sig.side.sign
         want = "bullish" if sig.side is Side.LONG else "bearish"
-        k = bisect_right(ev_times, t)  # events confirmed strictly after T
+        after_t = t
+        if pullback_levels is not None:
+            level = pullback_levels.get(t)
+            pulled = None
+            for b in bars[start:]:
+                if b.close_time > t + expiry:
+                    break
+                if (b.low <= level) if sign > 0 else (b.high >= level):  # type: ignore[operator]
+                    pulled = b
+                    break
+            if level is None or pulled is None:
+                counts["d_no_choch"] += 1
+                continue
+            after_t = pulled.close_time - 1  # an event on the pullback candle itself counts
+        k = bisect_right(ev_times, after_t)  # events confirmed strictly after T
         fill_index = None
         while k < len(events) and events[k].close_time <= t + expiry:
             if events[k].direction == want:

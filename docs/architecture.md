@@ -101,7 +101,8 @@ must match `FRONTEND_ORIGIN`.
 | `signal.closed`      | S → C     | 4     | Signal reached a final state (TP3, stop, invalidated, expired, closed)                                                                                    |
 | `scanner.update`     | S → C     | 5     | Scanner row changes (not implemented)                                                                                                                     |
 
-`signal.*` events carry `{symbol, timeframe, …}` and are sent only to connections
+`signal.*` events carry `{symbol, timeframe, strategy, …}` (`strategy` = validation status
+of the strategy version, Phase 4.1) and are sent only to connections
 subscribed to that stream (via `market.subscribe`).
 
 Close codes: `4401` unauthorized, `4403` session expired (client stops reconnecting and

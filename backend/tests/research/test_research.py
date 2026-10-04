@@ -299,7 +299,9 @@ def test_ltf_entry_never_precedes_htf_confirmation(
     _, canonical = research
     template = next(s for s in canonical if s.side is Side.LONG and s.entered)
     t0 = 1_700_000_100 // 900 * 900
-    plan = replace(template.plan, preferred_entry=100.0, stop=95.0, risk=5.0)
+    plan = replace(
+        template.plan, entry_model=EntryModel.MARKET, preferred_entry=100.0, stop=95.0, risk=5.0
+    )
     t1, t2, t3 = (
         replace(tg, price=p) for tg, p in zip(plan.targets, (110.0, 115.0, 120.0), strict=True)
     )

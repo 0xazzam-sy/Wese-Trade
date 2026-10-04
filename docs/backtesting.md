@@ -1,5 +1,9 @@
 # Wese Trade — Backtesting & Historical Validation (Phase 4)
 
+> **Phase 4.1 follow-up:** the research in [`research.md`](research.md) uses expanded data,
+> 12 symbols and chronological walk-forward windows (this document's 70/30 holdout is now
+> considered contaminated). Read it for the current verdict.
+
 > **Bottom line (honest):** the validated engine version `wese-trade-signal-4.0-f26f636443`
 > did **not** show a positive expectancy after costs.
 >

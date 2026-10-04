@@ -9,9 +9,9 @@ pre-period (before W1); W1-W3 are validation windows reported separately.
 from __future__ import annotations
 
 import math
-import multiprocessing as mp
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Sequence
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import replace
 from statistics import mean, median
 from typing import Any
@@ -20,6 +20,7 @@ from app.backtesting.metrics import compute
 from app.market_data.timeframes import Timeframe
 from app.research.collect import ALL_FAMILIES, SeriesResearch
 from app.research.ltf import ltf_entries
+from app.research.pass1 import load_series
 from app.research.simulate import (
     BASELINE,
     COSTS,
@@ -41,10 +42,10 @@ from app.research.walkforward import (
     window_of,
 )
 from app.signal_engine.config import DEFAULT_SIGNAL_CONFIG
+from app.signal_engine.enums import EntryModel
 from app.signal_engine.models import Signal, TradePlan
 
 SeriesMap = dict[tuple[str, str], SeriesResearch]
-_SERIES: SeriesMap = {}
 COST_FLOOR_REASON = "وقف الخسارة المنطقي أصغر من تكلفة التداول والضوضاء"
 SIGNAL_TFS = ("5m", "15m", "30m", "1h")
 FAMILY_SHORT = {
@@ -55,33 +56,67 @@ FAMILY_SHORT = {
 }
 
 
-# --- running variants in parallel ---------------------------------------------------------------
-def _run_one(args: tuple[Variant, tuple[str, str]]) -> tuple[str, list[Signal]]:
-    v, key = args
-    return v.name, run(v, _SERIES[key])
+# --- per-series workers (each loads ONE series pickle; the parent never holds them all) ---
+def slim(sig: Signal) -> Signal:
+    """Drop audit-only payload before returning trades to the parent process."""
+    return replace(
+        sig, components=(), penalties=(), positive=(), negative=(), evidence={}, history=[]
+    )
 
 
-def run_variants(
-    series: SeriesMap,
-    variants: Sequence[Variant],
-    *,
-    timeframes: Iterable[str] | None = None,
-    workers: int = 4,
-) -> dict[str, list[Signal]]:
-    """{variant name: trades over the selected series}. Fork workers share `series`."""
-    global _SERIES
-    _SERIES = series
-    tfs = set(timeframes) if timeframes is not None else None
-    keys = [k for k in series if tfs is None or k[1] in tfs]
-    tasks = [(v, k) for v in variants for k in keys]
-    out: dict[str, list[Signal]] = {v.name: [] for v in variants}
-    ctx = mp.get_context("fork")
-    with ctx.Pool(workers) as pool:
-        for name, trades in pool.imap_unordered(_run_one, tasks, chunksize=4):
-            out[name].extend(trades)
-    for trades in out.values():
-        trades.sort(key=lambda s: (s.confirmed_time, s.symbol, s.timeframe))
+def series_phase_a(key: tuple[str, str]) -> tuple[tuple[str, str], list[Outcome], dict[str, Any]]:
+    """Isolated hypothesis outcomes + raw cost-efficiency facts for one series."""
+    series = load_series(*key)
+    hyps = [h for tr in series.triggers for h in tr.hyps]
+    plans = [h.plans["base/A/A"] for h in hyps]
+    valid = [p for p in plans if isinstance(p, TradePlan)]
+    raw = {
+        "atr_pcts": [h.features["atr_pct"] for h in hyps if h.features.get("atr_pct")],
+        "plans": len(plans),
+        "floor_rejects": sum(1 for p in plans if p == COST_FLOOR_REASON),
+        "risk_pcts": [p.risk / p.preferred_entry * 100 for p in valid if p.preferred_entry],
+    }
+    return key, isolated_outcomes(series), raw
+
+
+def series_phase_b(
+    args: tuple[tuple[str, str], Sequence[Variant]],
+) -> tuple[tuple[str, str], dict[str, list[Signal]]]:
+    key, variants = args
+    series = load_series(*key)
+    return key, {v.name: [slim(s) for s in run(v, series)] for v in variants}
+
+
+def ltf_symbol(
+    args: tuple[str, dict[str, list[Signal]]],
+) -> dict[str, dict[str, dict[str, Any]]]:
+    """LTF entry study for one symbol: 15m/30m signals executed on that symbol's 5m path."""
+    symbol, by_base = args
+    cfg = DEFAULT_SIGNAL_CONFIG
+    ltf = load_series(symbol, "5m")
+    out: dict[str, dict[str, dict[str, Any]]] = {}
+    for htf in ("15m", "30m"):
+        mids = {b.close_time: (b.high + b.low) / 2 for b in load_series(symbol, htf).bars}
+        for base, trades in by_base.items():
+            sigs = [
+                s for s in trades if s.timeframe == htf and s.plan.entry_model is EntryModel.MARKET
+            ]
+            a5, d5, c = ltf_entries(sigs, ltf, Timeframe(htf), cfg)
+            _, p5, pc = ltf_entries(sigs, ltf, Timeframe(htf), cfg, pullback_levels=mids)
+            out.setdefault(base, {})[htf] = {
+                "native": sigs,
+                "a5": [slim(s) for s in a5],
+                "d5": [slim(s) for s in d5],
+                "p5": [slim(s) for s in p5],
+                "counts": c,
+                "pullback_counts": pc,
+            }
     return out
+
+
+def parallel(fn: Callable[[Any], Any], tasks: Sequence[Any], workers: int) -> list[Any]:
+    with ProcessPoolExecutor(max_workers=workers) as pool:
+        return list(pool.map(fn, tasks))
 
 
 # --- summaries --------------------------------------------------------------------------------
@@ -148,28 +183,27 @@ def brief(summary: dict[str, Any]) -> dict[str, Any]:
 
 
 # --- cost efficiency per timeframe ------------------------------------------------------------
-def cost_efficiency(series: SeriesMap, outcomes: Sequence[Outcome]) -> dict[str, Any]:
+def cost_efficiency(
+    raw_by_key: dict[tuple[str, str], dict[str, Any]], outcomes: Sequence[Outcome]
+) -> dict[str, Any]:
     rt = DEFAULT_SIGNAL_CONFIG.round_trip_cost_rate() * 100  # % of price, market both sides
     out: dict[str, Any] = {"round_trip_cost_pct": rt}
     by_tf: dict[str, dict[str, Any]] = {}
-    for tf in sorted({k[1] for k in series}, key=lambda t: Timeframe(t).seconds):
-        hyps = [
-            h for (sym, t), s in series.items() if t == tf for tr in s.triggers for h in tr.hyps
-        ]
-        atr_pcts = [h.features["atr_pct"] for h in hyps if h.features.get("atr_pct")]
-        plans = [h.plans["base/A/A"] for h in hyps]
-        floor_rejects = sum(1 for p in plans if p == COST_FLOOR_REASON)
-        valid = [p for p in plans if isinstance(p, TradePlan)]
-        risk_pct = [p.risk / p.preferred_entry * 100 for p in valid if p.preferred_entry]
+    for tf in sorted({k[1] for k in raw_by_key}, key=lambda t: Timeframe(t).seconds):
+        raws = [r for k, r in raw_by_key.items() if k[1] == tf]
+        atr_pcts = [x for r in raws for x in r["atr_pcts"]]
+        risk_pct = [x for r in raws for x in r["risk_pcts"]]
+        n_plans = sum(r["plans"] for r in raws)
+        floor_rejects = sum(r["floor_rejects"] for r in raws)
         oc = [o for o in outcomes if o.timeframe == tf and o.entered and o.cost_r is not None]
         costs = [o.cost_r for o in oc if o.cost_r is not None]
         med_atr = median(atr_pcts) if atr_pcts else None
         by_tf[tf] = {
-            "hypotheses": len(hyps),
+            "hypotheses": n_plans,
             "median_atr_pct": med_atr,
             "cost_r_if_stop_1atr": (rt / med_atr) if med_atr else None,
             "cost_r_if_stop_0_5atr": (rt / (0.5 * med_atr)) if med_atr else None,
-            "plans_rejected_cost_floor_pct": 100 * floor_rejects / len(plans) if plans else None,
+            "plans_rejected_cost_floor_pct": 100 * floor_rejects / n_plans if n_plans else None,
             "median_plan_risk_pct": median(risk_pct) if risk_pct else None,
             "median_realized_cost_r": median(costs) if costs else None,
             "mean_realized_cost_r": mean(costs) if costs else None,
@@ -507,40 +541,43 @@ def reversal_diagnostics(outcomes: Sequence[Outcome]) -> dict[str, Any]:
 
 # --- LTF execution -------------------------------------------------------------------------------
 def ltf_study(
-    series: SeriesMap, trades: Sequence[Signal], windows: Sequence[Window]
+    per_symbol: Sequence[dict[str, dict[str, dict[str, Any]]]], windows: Sequence[Window]
 ) -> dict[str, Any]:
     out: dict[str, Any] = {}
-    cfg = DEFAULT_SIGNAL_CONFIG
-    for htf in ("15m", "30m"):
-        a_all: list[Signal] = []
-        d_all: list[Signal] = []
-        counts: dict[str, int] = defaultdict(int)
-        native = [s for s in trades if s.timeframe == htf]
-        for sym in sorted({s.symbol for s in native}):
-            ltf = series.get((sym, "5m"))
-            if ltf is None:
-                continue
-            sigs = [s for s in native if s.symbol == sym]
-            a5, d5, c = ltf_entries(sigs, ltf, Timeframe(htf), cfg)
-            a_all += a5
-            d_all += d5
-            for k, v in c.items():
-                counts[k] += v
-        out[htf] = {
-            "counts": dict(counts),
-            "native_htf_bars": stats(validation_trades([s for s in native], windows)),
-            "A5_market_at_confirmation": stats(validation_trades(a_all, windows)),
-            "D5_5m_choch_entry": stats(validation_trades(d_all, windows)),
-            "A5_windows": per_window(a_all, windows),
-            "D5_windows": per_window(d_all, windows),
-        }
-    return out
+    bases = sorted({b for r in per_symbol for b in r})
+    for base in bases:
+        out[base] = {}
+        for htf in ("15m", "30m"):
+            parts = [r[base][htf] for r in per_symbol if base in r and htf in r[base]]
 
+            def cat(k: str, parts: list[dict[str, Any]] = parts) -> list[Signal]:
+                return [s for p in parts for s in p[k]]
 
-def isolated_all(series: SeriesMap, plan_key: str = "base/A/A") -> list[Outcome]:
-    out: list[Outcome] = []
-    for s in series.values():
-        out += isolated_outcomes(s, plan_key=plan_key)
+            def tally(k: str, parts: list[dict[str, Any]] = parts) -> dict[str, int]:
+                acc: dict[str, int] = defaultdict(int)
+                for p in parts:
+                    for name, v in p[k].items():
+                        acc[name] += v
+                return dict(acc)
+
+            a5, d5, p5 = cat("a5"), cat("d5"), cat("p5")
+            out[base][htf] = {
+                "counts": tally("counts"),
+                "pullback_counts": tally("pullback_counts"),
+                "native_htf_bars": stats(validation_trades(cat("native"), windows)),
+                "A5_market_at_confirmation": stats(validation_trades(a5, windows)),
+                "D5_5m_choch_entry": stats(validation_trades(d5, windows)),
+                "D5b_pullback_then_5m_event": stats(validation_trades(p5, windows)),
+                "A5_windows": per_window(a5, windows),
+                "D5_windows": per_window(d5, windows),
+                "D5b_windows": per_window(p5, windows),
+                # R per HTF signal: a better-entry model that skips trades must still win in total
+                "total_r_validation": {
+                    "A5": sum(s.net_r or 0 for s in validation_trades(a5, windows)),
+                    "D5": sum(s.net_r or 0 for s in validation_trades(d5, windows)),
+                    "D5b": sum(s.net_r or 0 for s in validation_trades(p5, windows)),
+                },
+            }
     return out
 
 
@@ -562,10 +599,12 @@ __all__ = [
     "derive_score_model",
     "funding_study",
     "interactions",
-    "isolated_all",
     "ltf_study",
+    "ltf_symbol",
+    "parallel",
     "reversal_diagnostics",
-    "run_variants",
+    "series_phase_a",
+    "series_phase_b",
     "stats",
     "summarize",
 ]

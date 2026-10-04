@@ -22,7 +22,7 @@ from app.analysis.multi_timeframe.context import context_timeframes
 from app.market_data.timeframes import Timeframe
 from app.research import studies as st
 from app.research import universe
-from app.research.pass1 import load_series, run_pass1
+from app.research.pass1 import run_pass1
 from app.research.simulate import BASELINE, BASELINE_SCORE, COSTS, Variant
 from app.research.store import RESEARCH_DIR, ResearchStore
 from app.research.walkforward import (
@@ -158,8 +158,7 @@ def main(
         log("pass 1:", len(jobs), "series")
         for line in run_pass1(jobs, workers=workers):
             log("  ", line)
-    series = {(sym, tf): load_series(sym, tf) for sym, tf, _, _ in jobs}
-    log("loaded", len(series), "series")
+    keys = [(sym, tf) for sym, tf, _, _ in jobs]
 
     store = ResearchStore()
     coverage = {
@@ -167,7 +166,11 @@ def main(
         for s, tf, _, _ in jobs
     }
     funding = {m.symbol: store.load_funding(m.symbol) for m in members}
-    end = min(s.bars[-1].close_time for (sym, tf), s in series.items() if tf in st.SIGNAL_TFS)
+    end = min(
+        (c["last_ms"] + Timeframe(k.split(":")[1]).milliseconds) // 1000
+        for k, c in coverage.items()
+        if k.split(":")[1] in st.SIGNAL_TFS and c["last_ms"] is not None
+    )
     windows = make_windows(end, count=3, block_days=91)
     log(
         "windows",
@@ -201,10 +204,14 @@ def main(
     }
 
     # --- isolated hypothesis outcomes (score research, cost efficiency, diagnostics) ---
-    outcomes = st.isolated_all(series)
+    outcomes = []
+    raw_costs = {}
+    for key, oc, raw in st.parallel(st.series_phase_a, keys, workers):
+        outcomes += oc
+        raw_costs[key] = raw
     log("isolated outcomes", len(outcomes))
     signal_outcomes = [o for o in outcomes if o.timeframe in st.SIGNAL_TFS]
-    report["cost_efficiency"] = st.cost_efficiency(series, outcomes)
+    report["cost_efficiency"] = st.cost_efficiency(raw_costs, outcomes)
     analysis = st.component_analysis(signal_outcomes, windows, fresh)
     report["score_components"] = analysis
     report["correlations"] = st.correlation_matrix(signal_outcomes, windows)
@@ -285,7 +292,15 @@ def main(
     all_variants = [v for vs in studies.values() for v in vs]
     grid = candidate_grid(s41)
     log("running", len(all_variants), "study variants +", len(grid), "candidates")
-    results = st.run_variants(series, all_variants + grid, workers=workers)
+    everything = all_variants + grid
+    results: dict[str, list[Any]] = {v.name: [] for v in everything}
+    for _key, by_variant in st.parallel(
+        st.series_phase_b, [(k, everything) for k in keys], workers
+    ):
+        for vname, trades in by_variant.items():
+            results[vname].extend(trades)
+    for trades in results.values():
+        trades.sort(key=lambda s: (s.confirmed_time, s.symbol, s.timeframe))
     log("variants done")
 
     report["studies"] = {}
@@ -312,9 +327,18 @@ def main(
         )
         for tf in ("1m", "10m")
     }
-    report["ltf"] = st.ltf_study(
-        series, [s for s in results["trend@base"] if s.timeframe in ("15m", "30m")], windows
-    )
+    ltf_tasks = []
+    for m in members:
+        if (m.symbol, "5m") not in keys:
+            continue
+        by_base = {
+            base: [
+                x for x in results[base] if x.symbol == m.symbol and x.timeframe in ("15m", "30m")
+            ]
+            for base in ("trend@base", "baseline")
+        }
+        ltf_tasks.append((m.symbol, by_base))
+    report["ltf"] = st.ltf_study(st.parallel(st.ltf_symbol, ltf_tasks, workers), windows)
 
     # --- candidates: walk-forward selection + per-candidate robustness --------------------------
     report["candidates"] = {}

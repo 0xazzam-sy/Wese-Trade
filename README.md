@@ -13,7 +13,7 @@ using **OKX public market data**.
 > Signals are computed from OKX data, not from another exchange's execution price.
 > No automatic cross-exchange correction is attempted.
 
-**Current status: Phase 4 complete (signal engine, trade plans and historical validation).**
+**Current status: Phase 4.1 complete (signal-edge research, walk-forward validation, strategy validation status).**
 
 > **Read this before using signals.** The historical validation of the current signal
 > engine did **not** show a positive expectancy after fees and slippage (holdout: 298
@@ -252,6 +252,9 @@ browser uses one origin and the secure httpOnly session cookie just works.
 | Live analysis tests (internet)               | `pytest -m live_analysis`                                   |
 | Download backtest history (internet, ~12 MB) | `python -m app.scripts.fetch_history`                       |
 | Run the backtest                             | `python -m app.scripts.run_backtest --name final --save-db` |
+| Research: choose universe + download (internet) | `python -m app.scripts.research_fetch --select` then `python -m app.scripts.research_fetch` |
+| Research: walk-forward studies               | `python -m app.scripts.run_research --name phase41`         |
+| Research: Markdown report                    | `python -m app.scripts.research_report --name phase41`      |
 | Lint                                         | `ruff check .`                                              |
 | Format                                       | `ruff format .`                                             |
 | Type-check (strict)                          | `mypy app tests alembic`                                    |
@@ -297,6 +300,7 @@ wese-trade/
 │   │   ├── analysis/        Market intelligence engine (Phase 3) + live AnalysisService
 │   │   ├── signal_engine/   Signal engine (Phase 4): rules, scoring, trade plan, lifecycle, live service
 │   │   ├── backtesting/     History download, replay/simulate, metrics, reports
+│   │   ├── research/        Phase 4.1: research store, universe, walk-forward studies
 │   │   ├── scanner/         Contracts only
 │   │   ├── news/            Contracts + honest empty feed
 │   │   ├── scripts/         create_admin, fetch_history, run_backtest CLIs
@@ -320,7 +324,8 @@ wese-trade/
 ├── docs/okx-market-data.md    OKX API usage, behaviour, real validation results
 ├── docs/market-intelligence.md  Analysis definitions, no-repaint rules, defaults, validation
 ├── docs/signal-engine.md      Signal rules, scoring, trade plan, lifecycle, API/events
-├── docs/backtesting.md        Backtest methodology and honest validation results
+├── docs/backtesting.md        Backtest methodology and honest validation results (Phase 4)
+├── docs/research.md           Phase 4.1 signal-edge research: walk-forward, robustness, verdict
 ├── docs/bingx-market-data.md  Historical: the former BingX provider (removed)
 └── scripts/                 dev.sh (run both), check.sh (all quality gates)
 ```

@@ -5,7 +5,8 @@
 > a rule-based setup with a structural trade plan. It is **not** a recommendation and
 > **not** a guarantee: «الإشارات تحليلية وليست ضماناً للربح.»
 >
-> **Read [`backtesting.md`](backtesting.md) before trusting any signal.** The historical
+> **Read [`research.md`](research.md) and [`backtesting.md`](backtesting.md) before trusting any
+> signal.** The strategy is labelled «تجريبي · غير مُثبت» in the UI. The historical
 > validation of this engine version did **not** demonstrate a positive expectancy after
 > costs (holdout −0.126 R per trade).
 
@@ -288,7 +289,37 @@ WebSocket events (per subscribed stream, see architecture.md §3):
   symbol, timeframe, setup and regime, and score calibration.
 - The risk note «الإشارات تحليلية وليست ضماناً للربح.» is always visible.
 
-## 12. Known weaknesses
+## 12. Validation status and research-only timeframes (Phase 4.1)
+
+`app/signal_engine/validation.py` holds the strategy's validation status and its
+deployment policy. Neither is ever changed automatically: decisions are documented in
+[`research.md`](research.md).
+
+| Status | Arabic | Meaning |
+| --- | --- | --- |
+| `unproven` | غير مُثبت | no demonstrated edge (the current baseline) |
+| `testing` | قيد الاختبار | under historical research |
+| `passed_historical` | اجتاز الاختبار التاريخي | met the walk-forward acceptance criteria |
+| `forward_test` | اختبار مباشر | live forward test (still analytical, never "trusted") |
+| `rejected` | مرفوض | failed; no directional signals |
+
+Allowed transitions: unproven→testing→{passed_historical, rejected};
+passed_historical→{forward_test, rejected}; forward_test→rejected; rejected→testing
+(re-testing means a new version). Skipping historical validation is impossible (tested).
+
+**Deployment policy.**
+- The frozen baseline is `unproven` and labelled «تجريبي». Directional live signals are
+  allowed only on its policy timeframes (**15m, 30m, 1h**).
+- On **1m, 5m and 10m** the engine still evaluates and shows its reasoning, but a BUY/SELL
+  becomes NEUTRAL with «إطار زمني للبحث فقط — لا إشارات اتجاهية لهذا الإطار».
+- Every `signal.*` event, the REST state and `/signals/health` carry
+  `strategy: {version, status, status_ar, label_ar, forward_test, signal_capable, note_ar}`.
+- The panel always shows the status badge («تجريبي · غير مُثبت» or «اختبار مباشر»), plus a
+  research-only note when relevant.
+
+The policy lives outside `SignalConfig`, so the frozen baseline version is unchanged.
+
+## 13. Known weaknesses
 
 See backtesting.md §8. Most importantly:
 
