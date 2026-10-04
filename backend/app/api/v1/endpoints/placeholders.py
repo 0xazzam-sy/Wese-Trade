@@ -26,6 +26,4 @@ def _status_router(module: str, message: str) -> APIRouter:
     return router
 
 
-signals_router = _status_router("signals", "Signal engine is not implemented yet.")
 scanner_router = _status_router("scanner", "Market scanner is not implemented yet.")
-backtests_router = _status_router("backtests", "Backtesting engine is not implemented yet.")

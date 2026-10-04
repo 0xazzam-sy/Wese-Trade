@@ -7,6 +7,7 @@ import { ApiError } from '@/lib/http';
 import { marketsApi } from '@/services/api/markets';
 import { marketFeed } from '@/services/realtime/marketFeed';
 import type { AnalysisSnapshot } from '@/types/analysis';
+import type { SignalView } from '@/types/signal';
 import type { CandleBar, MarketSymbol, StreamState, Timeframe } from '@/types/market';
 
 export const HISTORY_LIMIT = 800;
@@ -22,6 +23,8 @@ export interface MarketChartState {
   stream: StreamState | null;
   /** Backend analysis for exactly this symbol/timeframe (null until the first update). */
   analysis: AnalysisSnapshot | null;
+  /** Signals for exactly this symbol/timeframe (null until the first signal event). */
+  signal: SignalView | null;
   reload: () => void;
 }
 
@@ -65,6 +68,8 @@ export function useMarketChart(
   const load: ChartLoadState = loadState?.key === runKey ? loadState.value : { status: 'loading' };
   const stream = streamState?.key === runKey ? streamState.value : null;
   const analysis = analysisState?.key === streamKey ? analysisState.value : null;
+  const [signalState, setSignalState] = useState<{ key: string; value: SignalView } | null>(null);
+  const signal = signalState?.key === streamKey ? signalState.value : null;
 
   useEffect(() => {
     // setData() does not reset series options, so this survives chart resets.
@@ -104,6 +109,10 @@ export function useMarketChart(
       },
       onResync: () => {
         if (active) reload();
+      },
+      onSignal: (view) => {
+        if (!active || view.symbol !== symbol || view.timeframe !== timeframe) return;
+        setSignalState({ key: `${symbol}|${timeframe}`, value: view });
       },
       onAnalysis: (update) => {
         if (!active) return;
@@ -147,5 +156,5 @@ export function useMarketChart(
     };
   }, [controllerRef, symbol, timeframe, reloadToken, reload]);
 
-  return { load, stream, analysis, reload };
+  return { load, stream, analysis, signal, reload };
 }

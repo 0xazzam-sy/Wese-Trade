@@ -3,8 +3,9 @@
 Wese Trade is a **local-first, analysis-only** crypto market platform. It never places
 orders, never stores exchange trading keys, and never uses an LLM to make trading decisions.
 
-This document describes the Phase 1 foundation and the domain contracts that later phases
-must follow.
+This document describes the architecture (Phases 1–4) and the domain contracts that later
+phases must follow. Signal-engine details: [`signal-engine.md`](signal-engine.md);
+validation: [`backtesting.md`](backtesting.md).
 
 ---
 
@@ -21,7 +22,7 @@ must follow.
 │ FastAPI (backend/app)                                                            │
 │ api/v1 (thin routes) → services/ (domain logic) → db/ + models/                  │
 │ websocket/ (envelope, connection manager)                                        │
-│ market_data/ · signal_engine/ · scanner/ · backtesting/ · news/  (contracts)     │
+│ market_data/ · analysis/ · signal_engine/ · backtesting/ · scanner/ · news/      │
 └──────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -31,14 +32,14 @@ and forwards `/api` to Uvicorn: the same topology, so no code changes are requir
 
 ### Backend layering rules
 
-| Layer          | Responsibility                                    | May depend on                 |
-| -------------- | ------------------------------------------------- | ----------------------------- |
-| `api/`         | HTTP parsing, status codes, cookies               | `services`, `schemas`, `auth` |
-| `services/`    | Domain logic (users, health, later: signals…)     | `models`, `db`, domain pkgs   |
-| `models/`      | SQLAlchemy ORM tables                             | `db`                          |
-| `schemas/`     | Pydantic request/response models                  | —                             |
-| `market_data/` | Normalized types + `MarketDataProvider` protocol  | —                             |
-| `websocket/`   | Envelope, connection manager, `/ws` route         | `auth`, `core`                |
+| Layer          | Responsibility                                   | May depend on                 |
+| -------------- | ------------------------------------------------ | ----------------------------- |
+| `api/`         | HTTP parsing, status codes, cookies              | `services`, `schemas`, `auth` |
+| `services/`    | Domain logic (users, health, later: signals…)    | `models`, `db`, domain pkgs   |
+| `models/`      | SQLAlchemy ORM tables                            | `db`                          |
+| `schemas/`     | Pydantic request/response models                 | —                             |
+| `market_data/` | Normalized types + `MarketDataProvider` protocol | —                             |
+| `websocket/`   | Envelope, connection manager, `/ws` route        | `auth`, `core`                |
 
 Exchange-specific code (OKX) lives behind `MarketDataProvider` and is **never** called
 from route handlers directly.
@@ -79,24 +80,29 @@ must match `FRONTEND_ORIGIN`.
 
 ### Event types
 
-| Type               | Direction | Phase | Purpose                                         |
-| ------------------ | --------- | ----- | ----------------------------------------------- |
-| `system.status`    | S → C     | 1     | Sent on connect (`state: "connected"`)          |
-| `system.heartbeat` | S → C     | 1     | Keep-alive every `ws_heartbeat_seconds` (20s)   |
-| `system.ping`      | C → S     | 1     | Client keep-alive (every 15s)                   |
-| `system.pong`      | S → C     | 1     | Reply to ping                                   |
-| `system.error`     | S → C     | 1     | Protocol errors (`invalid_message`, …)          |
-| `market.subscribe` | C → S     | 2     | `{symbol, timeframe}`; ack `market.subscribed`  |
-| `market.unsubscribe` | C → S   | 2     | Release a subscription (also on disconnect)     |
-| `market.tick`      | S → C     | 2     | Latest price for subscribed symbols             |
-| `market.candle`    | S → C     | 2     | `{symbol, timeframe, candle:{time,o,h,l,c,v,is_closed}}` |
-| `market.stream`    | S → C     | 2     | Per stream: `live` / `stale` / `reconnecting` / `unavailable` |
-| `market.resync`    | S → C     | 2     | History changed (gap recovery): refetch it      |
-| `market.status`    | S → C     | 2     | Exchange feed: connected/connecting/reconnecting/degraded/disconnected |
-| `analysis.update`  | S → C     | 3     | Market analysis for a subscribed stream: `kind: "full"` (subscribe, every candle close) or `"live"` (forming-candle fields, throttled) |
-| `signal.live`      | S → C     | 4     | Developing signal (may change until close)      |
-| `signal.confirmed` | S → C     | 4     | Signal confirmed at candle close                |
-| `scanner.update`   | S → C     | 4+    | Scanner row changes                             |
+| Type                 | Direction | Phase | Purpose                                                                                                                                                   |
+| -------------------- | --------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `system.status`      | S → C     | 1     | Sent on connect (`state: "connected"`)                                                                                                                    |
+| `system.heartbeat`   | S → C     | 1     | Keep-alive every `ws_heartbeat_seconds` (20s)                                                                                                             |
+| `system.ping`        | C → S     | 1     | Client keep-alive (every 15s)                                                                                                                             |
+| `system.pong`        | S → C     | 1     | Reply to ping                                                                                                                                             |
+| `system.error`       | S → C     | 1     | Protocol errors (`invalid_message`, …)                                                                                                                    |
+| `market.subscribe`   | C → S     | 2     | `{symbol, timeframe}`; ack `market.subscribed`                                                                                                            |
+| `market.unsubscribe` | C → S     | 2     | Release a subscription (also on disconnect)                                                                                                               |
+| `market.tick`        | S → C     | 2     | Latest price for subscribed symbols                                                                                                                       |
+| `market.candle`      | S → C     | 2     | `{symbol, timeframe, candle:{time,o,h,l,c,v,is_closed}}`                                                                                                  |
+| `market.stream`      | S → C     | 2     | Per stream: `live` / `stale` / `reconnecting` / `unavailable`                                                                                             |
+| `market.resync`      | S → C     | 2     | History changed (gap recovery): refetch it                                                                                                                |
+| `market.status`      | S → C     | 2     | Exchange feed: connected/connecting/reconnecting/degraded/disconnected                                                                                    |
+| `analysis.update`    | S → C     | 3     | Market analysis for a subscribed stream: `kind: "full"` (subscribe, every candle close) or `"live"` (forming-candle fields, throttled)                    |
+| `signal.developing`  | S → C     | 4     | Forming-candle evaluation (throttled; never a trade, may change until close)                                                                              |
+| `signal.confirmed`   | S → C     | 4     | New signal confirmed at candle close (`{signal}` with frozen plan)                                                                                        |
+| `signal.updated`     | S → C     | 4     | Closed-candle evaluation (`{evaluation}`), lifecycle change (`{signal}`), or full state on subscribe (`{evaluation, developing, active, last_confirmed}`) |
+| `signal.closed`      | S → C     | 4     | Signal reached a final state (TP3, stop, invalidated, expired, closed)                                                                                    |
+| `scanner.update`     | S → C     | 5     | Scanner row changes (not implemented)                                                                                                                     |
+
+`signal.*` events carry `{symbol, timeframe, …}` and are sent only to connections
+subscribed to that stream (via `market.subscribe`).
 
 Close codes: `4401` unauthorized, `4403` session expired (client stops reconnecting and
 returns to login), `1001` server shutdown. Any other close triggers exponential-backoff
@@ -169,9 +175,39 @@ MarketDataEngine ──candle_listeners / resync_listeners──► analysis/ser
   formats. `news` is never imported by `analysis`.
 - Output is **analysis only**: no labels, entries, stops, targets or confidence.
 
+### Phase 4 implementation: signal engine (see `docs/signal-engine.md`)
+
+```
+AnalysisService ──AnalysisListener (on_seeded / on_closed / on_forming)──► SignalService
+                                                                              │ waits for context TFs
+                                                                              ▼ closing at the same instant
+          runtime.evaluate_closed / evaluate_developing  ◄── also used by backtesting/runner.replay
+                                   ▼
+          SignalEngine.evaluate(SignalInput) -> SignalEvaluation     (pure, deterministic)
+                                   ▼
+          SignalTracker (dedupe, cooldown, fills, TP/SL, expiry)     (same in backtests)
+                                   ▼
+     signal.* events · signals / signal_outcomes · /api/v1/signals · /api/v1/backtests
+```
+
+- **Live == backtest.**
+  - The engine and the tracker are the same objects in both.
+  - The backtester replays candles sequentially. Context analyzers only see candles closed
+    at or before the evaluated close.
+  - Live waits up to 15 s for context candles closing at the same instant, so it sees the
+    same inputs.
+- **Versioned.** Every evaluation, signal and backtest run carries `strategy_version`
+  (engine version + hash of signal and analysis configs).
+- **Honest output.**
+  - NEUTRAL is the default.
+  - The score is confluence, not probability.
+  - STRONG classes are disabled because evidence does not support them.
+  - Validation results, including negative ones, are documented in `docs/backtesting.md`.
+- The signal engine never imports FastAPI, exchange code or `news`.
+
 ---
 
-## 5. Future analysis pipeline
+## 5. Analysis pipeline
 
 ```
 OKX public market data
@@ -194,21 +230,24 @@ Zone Engine                   (order blocks, FVG, premium/discount, OTE) ✅ pha
   ↓
 Multi-Timeframe Context       (higher-timeframe alignment)               ✅ phase 3
   ↓
-Signal Scoring Engine         (confluence → label + confidence + trade plan)   phase 4
+Signal Scoring Engine         (setups → bull/bear confluence → class + trade plan)  ✅ phase 4
   ↓
-Signal Lifecycle              (developing → confirmed → closed / invalidated)
+Signal Lifecycle              (developing → confirmed → active → TP/SL/expired)     ✅ phase 4
   ↓
-WebSocket / API               (signal.live, signal.confirmed, scanner.update)
+Backtester                    (same engine + tracker, fees/slippage, R metrics)     ✅ phase 4
+  ↓
+WebSocket / API               (signal.*, /signals, /backtests; scanner.update later)
   ↓
 Frontend                      (display only)
 ```
 
 ### Shared strategy logic (live == backtest)
 
-`app/signal_engine/contracts.py` defines `Strategy.evaluate(MarketContext) -> Signal | None`.
-A strategy is a **pure, deterministic function**: no network access, no wall-clock reads.
-The live engine and the backtester both call the **same** `Strategy` implementation, so
-backtest results describe the live behaviour exactly.
+`SignalEngine.evaluate(SignalInput) -> SignalEvaluation` (`app/signal_engine/engine.py`) is a
+**pure, deterministic function**: no network access, no wall-clock reads. Live
+(`SignalService`), the backtester (`backtesting/runner.py`) and the future scanner call it
+through `signal_engine/runtime.py` and share `SignalTracker`, so backtest results describe
+the live behaviour (bar-level, see backtesting.md for the simulation assumptions).
 
 ### Signal labels
 
@@ -216,20 +255,26 @@ backtest results describe the live behaviour exactly.
 
 ### Signal states
 
-| State         | Meaning                                                       |
-| ------------- | ------------------------------------------------------------- |
-| `developing`  | Conditions forming on an open candle; may still change        |
-| `confirmed`   | Conditions held at candle close; trade plan is fixed          |
-| `invalidated` | Setup broke before entry (e.g. structure violated)            |
-| `closed`      | Plan finished: TP3, SL, or expiry. Outcome recorded           |
+| State                | Meaning                                                                 |
+| -------------------- | ----------------------------------------------------------------------- |
+| `developing`         | Conditions forming on an open candle; may still change (never a trade)  |
+| `confirmed`          | Conditions held at candle close; trade plan is frozen; awaiting fill    |
+| `active`             | Entry filled                                                            |
+| `tp1_hit`, `tp2_hit` | Partial targets reached                                                 |
+| `tp3_hit`            | Final target reached (final)                                            |
+| `stopped`            | Stop hit (final; same-candle stop+TP counts as stop, flagged ambiguous) |
+| `invalidated`        | Close beyond the invalidation level before the fill (final)             |
+| `expired`            | No fill within 6 candles (final)                                        |
+| `closed`             | Time stop (48 candles) or opposite STRONG override (final)              |
 
-### Confidence score — important
+### Signal strength score — important
 
-A confidence score such as **87/100** is a **strategy confluence score**: how many weighted
+«قوة الإشارة» such as **87/100** is a **strategy confluence score**: how many weighted
 conditions of the strategy agree. It is **not** "an 87% probability that the trade wins" and
 must never be presented that way in the UI, documentation, or API field descriptions.
 Calibrated probabilities, if ever shown, require a separate backtest-validated statistic
-with its sample size.
+with its sample size. The Phase 4 backtest found the score **uncalibrated** (holdout
+expectancy fell as the score rose), so no probability is shown.
 
 ### News isolation
 
@@ -240,19 +285,24 @@ News is display-only. The `news` package must never be imported by `signal_engin
 
 ## 6. Database
 
-Phase 1 table: `users` (`id, username, password_hash, role, is_active, created_at,
-updated_at, last_login_at`). All datetimes are timezone-aware UTC (`UTCDateTime` type).
+Tables:
+
+| Table             | Since | Purpose                                                                                                                      |
+| ----------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `users`           | 1     | `id, username, password_hash, role, is_active, created_at, updated_at, last_login_at`                                        |
+| `signals`         | 4     | Every confirmed signal: frozen plan/score/components/evidence, lifecycle state, `source` (live/backtest), `strategy_version` |
+| `signal_outcomes` | 4     | Exits, gross/net R, ambiguity, MFE/MAE per signal                                                                            |
+| `backtest_runs`   | 4     | Config, data ranges, summary metrics, `strategy_version`                                                                     |
+
+All datetimes are timezone-aware UTC (`UTCDateTime` type).
 
 Planned tables (not created yet):
 
-| Table              | Purpose                                                        |
-| ------------------ | -------------------------------------------------------------- |
+| Table              | Purpose                                                            |
+| ------------------ | ------------------------------------------------------------------ |
 | `user_preferences` | Per-user layout, chart selections, theme (moves from localStorage) |
-| `signals`          | Every generated signal with strategy version and inputs hash   |
-| `signal_outcomes`  | Realized result per signal (hit TP1/2/3, SL, expired; R)       |
-| `market_snapshots` | Persisted closed candles / symbol metadata for replay          |
-| `backtest_runs`    | Parameters, strategy version, metrics, status                  |
-| `news_cache`       | Fetched + translated headlines (display only)                  |
+| `market_snapshots` | Persisted closed candles / symbol metadata for replay              |
+| `news_cache`       | Fetched + translated headlines (display only)                      |
 
 SQLite is used locally (`backend/data/wese_trade.db`). PostgreSQL only needs
 `DATABASE_URL=postgresql+asyncpg://…` plus the `asyncpg` driver: models use portable types
@@ -266,7 +316,7 @@ SQLite is used locally (`backend/data/wese_trade.db`). PostgreSQL only needs
 src/
   app/          App root, router, query client
   layouts/      AppShell (realtime owner), AppHeader
-  pages/        LoginPage, DashboardPage, NotFoundPage
+  pages/        LoginPage, DashboardPage, BacktestsPage (admin/analyst), NotFoundPage
   features/     auth · charts · scanner · news · signals · header · weather · realtime · system
   components/ui Design-system primitives (Panel, Button, SegmentedControl, …)
   stores/       Zustand: auth, theme, layout, chart selection, connection
@@ -292,12 +342,21 @@ src/
   beneath candles, lines/labels above) drawing a pure `buildOverlayModel(snapshot, toggles)`:
   swing/internal pivots, BOS/CHoCH, protected levels, liquidity pools/EQH/EQL, sweeps, FVG,
   order blocks, premium/discount and OTE. Toggles persist in `wesetrade.overlays`.
-  Overlays only draw backend-computed data. Signal markers and Entry/SL/TP lines are phase 4.
+  Overlays only draw backend-computed data. Phase 4 adds `signalOverlay(view, toggles)`:
+  confirmed markers («شراء 78»), faded developing markers («شراء؟») and Entry/SL/TP1–3
+  lines for the active signal only (toggles `signals`, `tradePlan`).
 - **Analysis UI**: `MarketFeed` routes `analysis.update` per stream (and replays the latest
   analysis to a chart joining an existing stream); `useMarketChart` exposes it with the same
   generation guards as candles; `features/analysis/lib/merge.ts` applies live updates only
   on the matching full snapshot. The analysis panel (`features/signals/SignalPanel`) formats
-  the nine analysis cells and the MTF block; Entry/SL/TP/R:R stay "--". A debug view exists
-  only in development builds.
+  the nine analysis cells and the MTF block. A debug view exists only in development builds.
+- **Signal UI (Phase 4)**:
+  - `MarketFeed` routes `signal.*` per stream (cached and replayed to late subscribers).
+  - `features/signals/lib/reduce.ts` applies events to a per-stream `SignalView`, and
+    `display.ts` picks what to show: active > developing > last evaluation.
+  - `SignalPanel` shows the class, «قوة الإشارة NN/100», the plan and the state.
+    `SignalDetails` is the drawer.
+  - `/backtests` (admin/analyst) reads `/api/v1/backtests`.
+  - Signal colours come from the `--ns-sig-*` tokens.
 - **Weather** is optional and isolated: provider interface + "not configured" provider.
   Location is requested only on explicit user action, with low accuracy.

@@ -1,4 +1,4 @@
-import { ChevronDown, LogOut, UserRound } from 'lucide-react';
+import { ChartNoAxesColumn, ChevronDown, LogOut, UserRound } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 
@@ -68,6 +68,20 @@ export function AccountMenu() {
           role="menu"
           className="bg-surface-strong shadow-pop border-line absolute end-0 top-11 z-40 w-48 rounded-lg border p-1"
         >
+          {(user.role === 'admin' || user.role === 'analyst') && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                void navigate('/backtests');
+              }}
+              className="hover:bg-sunken flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm"
+            >
+              <ChartNoAxesColumn className="size-4" />
+              الاختبار التاريخي
+            </button>
+          )}
           <button
             type="button"
             role="menuitem"

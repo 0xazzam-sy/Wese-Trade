@@ -1,14 +1,33 @@
-import { act, render, screen, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, render as rtlRender, screen, within } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { useAnalysisStore } from '@/stores/analysisStore';
 import { notReady, readySnapshot } from '@/test/analysisFixture';
+import { evaluation, PLAN, signal, view } from '@/test/signalFixture';
+import type { SignalView } from '@/types/signal';
 
 import { SignalPanel } from './SignalPanel';
 
 afterEach(() => {
-  useAnalysisStore.setState({ byChart: { primary: null, secondary: null }, focused: 'primary' });
+  useAnalysisStore.setState({
+    byChart: { primary: null, secondary: null },
+    signals: { primary: null, secondary: null },
+    focused: 'primary',
+  });
 });
+
+function render(ui: ReactElement) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, enabled: false } } });
+  return rtlRender(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+}
+
+function setSignal(v: SignalView | null) {
+  act(() => {
+    useAnalysisStore.getState().setSignal('primary', v);
+  });
+}
 
 function setPrimary(snapshot: ReturnType<typeof readySnapshot> | null) {
   act(() => {
@@ -22,6 +41,7 @@ describe('SignalPanel (analysis)', () => {
     expect(screen.getByRole('status')).toHaveTextContent('جاري تحميل التحليل');
     const cells = within(screen.getByLabelText('مؤشرات التحليل'));
     expect(cells.getAllByText('--')).toHaveLength(9);
+    expect(screen.getByRole('button', { name: 'تفاصيل الإشارة' })).toBeDisabled();
   });
 
   it('shows why analysis is unavailable', () => {
@@ -62,27 +82,105 @@ describe('SignalPanel (analysis)', () => {
     expect(within(mtf).getByText('توافق صاعد')).toBeInTheDocument();
   });
 
-  it('never shows a BUY/SELL label or an Entry/SL/TP value', () => {
+  it('shows no signal and empty plan cells without a signal', () => {
     render(<SignalPanel />);
     setPrimary(readySnapshot());
     const panel = screen.getByLabelText('لوحة التحليل');
-    expect(panel.textContent).not.toMatch(/\b(BUY|SELL|STRONG)\b/);
-    // Whole words only ("طبيعي" = normal contains the letters of "بيع").
-    const words = panel.textContent.split(/[\s·]+/);
-    expect(words).not.toContain('شراء');
-    expect(words).not.toContain('بيع');
-    expect(within(panel).getByText('لا توجد إشارة حالياً')).toBeInTheDocument();
-    for (const label of [
-      'سعر الدخول',
-      'وقف الخسارة',
-      'الهدف الأول',
-      'الهدف الثاني',
-      'الهدف الثالث',
-    ]) {
-      const cell = within(panel).getByText(label).closest('div');
+    expect(panel).toHaveAttribute('data-signal-kind', 'none');
+    expect(screen.getByTestId('signal-badge')).toHaveTextContent('لا توجد إشارة حالياً');
+    for (const abbr of ['Entry', 'SL', 'TP1', 'TP2', 'TP3', 'R:R']) {
+      const cell = panel.querySelector(`[data-plan="${abbr}"]`);
       expect(cell).toHaveTextContent('--');
-      expect(cell?.getAttribute('title')).toContain('غير متاح بعد');
     }
+    expect(screen.getByTestId('signal-score')).toHaveTextContent('--');
+  });
+
+  it('shows a confirmed signal: class, score out of 100, and the backend trade plan', () => {
+    render(<SignalPanel />);
+    setPrimary(readySnapshot());
+    setSignal(view({ active: signal(), lastConfirmed: signal() }));
+    const panel = screen.getByLabelText('لوحة التحليل');
+    expect(panel).toHaveAttribute('data-signal-kind', 'confirmed');
+    expect(panel).toHaveAttribute('data-signal-class', 'BUY');
+    expect(screen.getByTestId('signal-badge')).toHaveTextContent('شراء');
+    expect(screen.getByTestId('signal-score')).toHaveTextContent('78/100');
+    expect(screen.getByRole('meter', { name: 'قوة الإشارة' })).toHaveAttribute(
+      'aria-valuenow',
+      '78',
+    );
+    expect(panel.querySelector('[data-plan="SL"]')).toHaveTextContent('98');
+    expect(panel.querySelector('[data-plan="TP3"]')).toHaveTextContent('106');
+    expect(panel.querySelector('[data-plan="R:R"]')).toHaveTextContent('1.0 / 1.8 / 3.0');
+    expect(screen.getByTestId('signal-state')).toHaveTextContent('نشطة');
+    // The score is confluence, never a probability.
+    const signalBlock = screen.getByTestId('signal-score').closest('div')?.parentElement;
+    expect(signalBlock?.textContent).not.toMatch(/\d\s*%/);
+    expect(panel.textContent).not.toContain('احتمال النجاح');
+    expect(panel).toHaveTextContent('الإشارات تحليلية وليست ضماناً للربح.');
+  });
+
+  it('renders a zone entry as a range', () => {
+    render(<SignalPanel />);
+    setPrimary(readySnapshot());
+    const plan = { ...PLAN, entry_model: 'ZONE_ENTRY' as const, entry_low: 99, entry_high: 100.5 };
+    setSignal(view({ active: signal({ plan, state: 'confirmed', entry_price: null }) }));
+    const cell = screen.getByLabelText('لوحة التحليل').querySelector('[data-plan="Entry"]');
+    expect(cell?.textContent).toMatch(/99.*–.*100\.5/);
+  });
+
+  it('marks a developing hypothesis as not confirmed', () => {
+    render(<SignalPanel />);
+    setPrimary(readySnapshot());
+    setSignal(
+      view({
+        developing: evaluation({
+          developing: true,
+          signal_class: 'SELL',
+          side: 'short',
+          score: 80,
+          plan: PLAN,
+        }),
+      }),
+    );
+    const panel = screen.getByLabelText('لوحة التحليل');
+    expect(panel).toHaveAttribute('data-signal-kind', 'developing');
+    expect(screen.getByTestId('signal-badge')).toHaveTextContent('بيع — قيد التشكّل');
+    expect(screen.getByTestId('signal-state')).toHaveTextContent('ليست إشارة مؤكدة');
+  });
+
+  it('a confirmed signal wins over a developing hypothesis', () => {
+    render(<SignalPanel />);
+    setPrimary(readySnapshot());
+    setSignal(
+      view({
+        active: signal(),
+        developing: evaluation({ developing: true, signal_class: 'SELL', side: 'short' }),
+      }),
+    );
+    expect(screen.getByTestId('signal-badge')).toHaveTextContent(/^شراء$/);
+  });
+
+  it('shows NEUTRAL with its reason and no score', () => {
+    render(<SignalPanel />);
+    setPrimary(readySnapshot());
+    setSignal(view({ evaluation: evaluation() }));
+    expect(screen.getByTestId('signal-badge')).toHaveTextContent('محايد');
+    expect(screen.getByTestId('signal-score')).toHaveTextContent('--');
+    expect(screen.getByTestId('signal-state')).toHaveTextContent('لا يوجد محفّز');
+  });
+
+  it('opens the details drawer with setup, factors and state', () => {
+    render(<SignalPanel />);
+    setPrimary(readySnapshot());
+    setSignal(view({ active: signal() }));
+    act(() => {
+      screen.getByRole('button', { name: 'تفاصيل الإشارة' }).click();
+    });
+    const drawer = screen.getByRole('dialog', { name: 'تفاصيل الإشارة' });
+    expect(drawer).toHaveTextContent('استمرار الاتجاه');
+    expect(drawer).toHaveTextContent('الإطار الأعلى صاعد');
+    expect(drawer).toHaveTextContent('الحجم أقل من المتوسط');
+    expect(drawer).toHaveTextContent('78/100');
   });
 
   it('switches between the primary and secondary chart analysis', () => {

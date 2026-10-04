@@ -15,8 +15,10 @@ export const EVENT_TYPES = {
   marketTick: 'market.tick',
   marketCandle: 'market.candle',
   analysisUpdate: 'analysis.update',
-  signalLive: 'signal.live',
+  signalDeveloping: 'signal.developing',
   signalConfirmed: 'signal.confirmed',
+  signalUpdated: 'signal.updated',
+  signalClosed: 'signal.closed',
   scannerUpdate: 'scanner.update',
 } as const;
 

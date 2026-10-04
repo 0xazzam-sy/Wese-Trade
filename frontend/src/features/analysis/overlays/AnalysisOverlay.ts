@@ -69,6 +69,9 @@ const LINE_COLOR: Record<LineKind, keyof OverlayPalette> = {
   'bos-bear': 'bear',
   protected: 'warning',
   'eq-line': 'neutral',
+  'plan-entry': 'accent',
+  'plan-stop': 'bear',
+  'plan-target': 'bull',
 };
 
 const TONE_COLOR: Record<Tone, keyof OverlayPalette> = {
@@ -264,6 +267,7 @@ export class AnalysisOverlay implements ChartOverlay, ISeriesPrimitive {
         const py = y(label.price);
         if (px === null || py === null) continue;
         ctx.globalAlpha = label.faded ? 0.45 : 0.9;
+        ctx.font = /[؀-ۿ]/.test(label.text) ? ARABIC_FONT : FONT;
         ctx.fillStyle = palette[TONE_COLOR[label.tone]];
         ctx.textBaseline = label.position === 'above' ? 'bottom' : 'top';
         ctx.fillText(label.text, px, label.position === 'above' ? py - 4 : py + 4);

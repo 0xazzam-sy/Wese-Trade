@@ -2,7 +2,14 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
 export type OverlayKey =
-  'structure' | 'liquidity' | 'fvg' | 'orderBlocks' | 'premiumDiscount' | 'ote';
+  | 'structure'
+  | 'liquidity'
+  | 'fvg'
+  | 'orderBlocks'
+  | 'premiumDiscount'
+  | 'ote'
+  | 'signals'
+  | 'tradePlan';
 
 export type OverlayToggles = Record<OverlayKey, boolean>;
 
@@ -14,6 +21,8 @@ export const DEFAULT_OVERLAYS: OverlayToggles = {
   orderBlocks: true,
   premiumDiscount: false,
   ote: false,
+  signals: true,
+  tradePlan: true,
 };
 
 export const OVERLAY_LABELS: { key: OverlayKey; label: string }[] = [
@@ -23,6 +32,8 @@ export const OVERLAY_LABELS: { key: OverlayKey; label: string }[] = [
   { key: 'orderBlocks', label: 'Order Blocks' },
   { key: 'premiumDiscount', label: 'Premium/Discount' },
   { key: 'ote', label: 'OTE' },
+  { key: 'signals', label: 'علامات الإشارات' },
+  { key: 'tradePlan', label: 'خطة الصفقة' },
 ];
 
 interface OverlayState {

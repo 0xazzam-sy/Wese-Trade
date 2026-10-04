@@ -35,9 +35,13 @@ class EventType(StrEnum):
     # --- Market intelligence (phase 3) -------------------------------------------
     ANALYSIS_UPDATE = "analysis.update"  # structured analysis for a subscribed stream
 
+    # --- Signals (phase 4) --------------------------------------------------------
+    SIGNAL_DEVELOPING = "signal.developing"  # forming-candle evaluation (throttled, display only)
+    SIGNAL_CONFIRMED = "signal.confirmed"  # a new confirmed signal (frozen plan)
+    SIGNAL_UPDATED = "signal.updated"  # close-time evaluation or lifecycle change
+    SIGNAL_CLOSED = "signal.closed"  # final state (tp3 / stop / expiry / invalidation / time)
+
     # --- Reserved for later phases (never emitted yet) -------------------------
-    SIGNAL_LIVE = "signal.live"
-    SIGNAL_CONFIRMED = "signal.confirmed"
     SCANNER_UPDATE = "scanner.update"
 
 

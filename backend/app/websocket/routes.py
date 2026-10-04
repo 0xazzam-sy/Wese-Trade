@@ -17,6 +17,7 @@ from app.auth.tokens import ACCESS_COOKIE_NAME, InvalidTokenError, decode_access
 from app.core.logging import get_logger
 from app.core.state import AppResources
 from app.market_data.engine import MarketDataEngine
+from app.signal_engine.service import SignalService
 from app.utils.time import utc_now
 from app.websocket.events import (
     CLOSE_SESSION_EXPIRED,
@@ -55,6 +56,7 @@ async def _handle_message(
     market: MarketDataEngine | None,
     raw: str,
     analysis: AnalysisService | None = None,
+    signals: SignalService | None = None,
 ) -> None:
     if len(raw.encode()) > MAX_CLIENT_MESSAGE_BYTES:
         await connection.send(
@@ -70,7 +72,7 @@ async def _handle_message(
     if message.type == EventType.SYSTEM_PING:
         await connection.send(EventEnvelope.of(EventType.SYSTEM_PONG, {"echo": message.data}))
     elif message.type in (EventType.MARKET_SUBSCRIBE, EventType.MARKET_UNSUBSCRIBE):
-        await handle_market_message(connection, market, message, analysis)
+        await handle_market_message(connection, market, message, analysis, signals)
     else:
         await connection.send(
             EventEnvelope.of(
@@ -126,7 +128,9 @@ async def realtime(websocket: WebSocket) -> None:
             await connection.send(resources.market.status_event())
         while True:
             raw = await websocket.receive_text()
-            await _handle_message(connection, resources.market, raw, resources.analysis)
+            await _handle_message(
+                connection, resources.market, raw, resources.analysis, resources.signals
+            )
     except WebSocketDisconnect:
         pass
     finally:

@@ -17,6 +17,7 @@ from app.core.logging import configure_logging, get_logger
 from app.core.state import AppResources
 from app.db.session import Database
 from app.market_data.factory import build_market_engine
+from app.signal_engine.service import SignalService
 from app.websocket.events import CLOSE_SERVER_SHUTDOWN
 from app.websocket.manager import ConnectionManager
 
@@ -29,15 +30,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     connections = ConnectionManager()
     market = build_market_engine(settings, connections) if settings.market_data_enabled else None
+    database = Database(settings)
+    analysis = (
+        AnalysisService(market, include_debug=not settings.is_production)
+        if market is not None
+        else None
+    )
     resources = AppResources(
         settings=settings,
-        database=Database(settings),
+        database=database,
         login_limiter=LoginRateLimiter(),
         connections=connections,
         market=market,
-        analysis=(
-            AnalysisService(market, include_debug=not settings.is_production)
-            if market is not None
+        analysis=analysis,
+        signals=(
+            SignalService(analysis, market, database)
+            if analysis is not None and market is not None
             else None
         ),
     )
@@ -49,7 +57,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             extra={"fields": {"env": settings.app_env.value, "version": __version__}},
         )
         if settings.uses_placeholder_secret:
-            logger.warning("config.placeholder_secret: set a unique SECRET_KEY in backend/.env")
+            logger.warning(
+                "config.placeholder_secret: SECRET_KEY is the placeholder. Generate one with "
+                '`python -c "import secrets; print(secrets.token_urlsafe(64))"` and set '
+                "SECRET_KEY in backend/.env (refused when APP_ENV=production)"
+            )
         if await resources.database.ping():
             logger.info("db.connected")
         else:
@@ -59,7 +71,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await resources.market.start()
         if resources.analysis is not None:
             await resources.analysis.start()
+        if resources.signals is not None:
+            await resources.signals.start()
         yield
+        if resources.signals is not None:
+            await resources.signals.stop()
         if resources.analysis is not None:
             await resources.analysis.stop()
         if resources.market is not None:

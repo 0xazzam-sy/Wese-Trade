@@ -40,6 +40,13 @@
   --ns-warning: #f5a524;
   --ns-warning-soft: rgb(245 165 36 / 0.14);
 
+  /* Signal classes (Phase 4): strong emerald / muted green / blue-gray / muted red / crimson */
+  --ns-sig-strong-buy: #10b981;
+  --ns-sig-buy: #5aa98c;
+  --ns-sig-neutral: #7f93ad;
+  --ns-sig-sell: #c9706f;
+  --ns-sig-strong-sell: #e11d48;
+
   /* Depth */
   --ns-shadow-panel: inset 0 1px 0 rgb(255 255 255 / 0.03), 0 18px 40px -24px rgb(0 0 0 / 0.85);
   --ns-shadow-pop: 0 24px 60px -20px rgb(0 0 0 / 0.9), 0 0 0 1px rgb(148 163 184 / 0.12);
@@ -87,6 +94,11 @@
   --ns-bear-soft: rgb(217 45 58 / 0.1);
   --ns-neutral: #64748b;
   --ns-neutral-soft: rgb(100 116 139 / 0.1);
+  --ns-sig-strong-buy: #047857;
+  --ns-sig-buy: #3f8f72;
+  --ns-sig-neutral: #5b6f88;
+  --ns-sig-sell: #b4534f;
+  --ns-sig-strong-sell: #be123c;
   --ns-warning: #c27803;
   --ns-warning-soft: rgb(194 120 3 / 0.1);
 

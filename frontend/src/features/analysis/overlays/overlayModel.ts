@@ -1,5 +1,6 @@
 import type { OverlayToggles } from '@/stores/overlayStore';
 import type { AnalysisSnapshot, Pivot, StructureEvent } from '@/types/analysis';
+import type { SignalClass, SignalDTO, SignalView } from '@/types/signal';
 
 /**
  * Pure translation of a backend snapshot into drawables. No analysis happens here:
@@ -7,7 +8,16 @@ import type { AnalysisSnapshot, Pivot, StructureEvent } from '@/types/analysis';
  */
 export type ZoneKind =
   'fvg-bull' | 'fvg-bear' | 'ob-bull' | 'ob-bear' | 'premium' | 'discount' | 'equilibrium' | 'ote';
-export type LineKind = 'liq-buy' | 'liq-sell' | 'bos-bull' | 'bos-bear' | 'protected' | 'eq-line';
+export type LineKind =
+  | 'liq-buy'
+  | 'liq-sell'
+  | 'bos-bull'
+  | 'bos-bear'
+  | 'protected'
+  | 'eq-line'
+  | 'plan-entry'
+  | 'plan-stop'
+  | 'plan-target';
 export type Tone = 'bull' | 'bear' | 'neutral' | 'accent' | 'violet' | 'warning';
 
 export interface OverlayZone {
@@ -110,9 +120,121 @@ function eventLines(
   };
 }
 
+const MARKER_AR: Record<SignalClass, string> = {
+  STRONG_BUY: 'شراء قوي',
+  BUY: 'شراء',
+  NEUTRAL: 'محايد',
+  SELL: 'بيع',
+  STRONG_SELL: 'بيع قوي',
+};
+
+function marker(signal: SignalDTO, faded: boolean): OverlayLabel {
+  const long = signal.side === 'long';
+  return {
+    id: `sig:${signal.id}`,
+    time: signal.confirmed_time,
+    price: signal.plan.stop,
+    text: `${MARKER_AR[signal.signal_class]} ${Math.round(signal.score).toString()}`,
+    tone: long ? 'bull' : 'bear',
+    position: long ? 'below' : 'above',
+    faded,
+  };
+}
+
+/**
+ * Signal markers and the active trade plan. Developing hypotheses are drawn faded with
+ * a "?" and never as plan lines: only a confirmed signal gets Entry/SL/TP lines.
+ */
+export function signalOverlay(
+  view: SignalView | null,
+  toggles: OverlayToggles,
+  formingTime: number | null,
+): { lines: OverlayLine[]; labels: OverlayLabel[] } {
+  const lines: OverlayLine[] = [];
+  const labels: OverlayLabel[] = [];
+  if (!view) return { lines, labels };
+  if (toggles.signals) {
+    const seen = new Set<string>();
+    for (const s of [view.active, view.lastConfirmed, view.lastClosed]) {
+      if (!s || seen.has(s.id)) continue;
+      seen.add(s.id);
+      labels.push(marker(s, s.id !== view.active?.id));
+    }
+    const dev = view.developing;
+    if (dev && dev.signal_class !== 'NEUTRAL' && dev.side && dev.plan && formingTime !== null) {
+      labels.push({
+        id: 'sig:developing',
+        time: formingTime,
+        price: dev.plan.stop,
+        text: `${MARKER_AR[dev.signal_class]}؟`,
+        tone: dev.side === 'long' ? 'bull' : 'bear',
+        position: dev.side === 'long' ? 'below' : 'above',
+        faded: true,
+      });
+    }
+  }
+  const active = view.active;
+  if (toggles.tradePlan && active) {
+    const from = active.confirmed_time;
+    const plan = active.plan;
+    const zone = plan.entry_model === 'ZONE_ENTRY' && plan.entry_low !== plan.entry_high;
+    lines.push({
+      id: `plan:${active.id}:entry`,
+      from,
+      to: null,
+      price: active.entry_price ?? plan.preferred_entry,
+      kind: 'plan-entry',
+      dashed: false,
+      faded: false,
+      label: 'دخول',
+    });
+    if (zone && active.entry_price === null) {
+      for (const [edge, price] of [
+        ['low', plan.entry_low],
+        ['high', plan.entry_high],
+      ] as const) {
+        lines.push({
+          id: `plan:${active.id}:entry-${edge}`,
+          from,
+          to: null,
+          price,
+          kind: 'plan-entry',
+          dashed: true,
+          faded: true,
+        });
+      }
+    }
+    lines.push({
+      id: `plan:${active.id}:sl`,
+      from,
+      to: null,
+      price: plan.stop,
+      kind: 'plan-stop',
+      dashed: false,
+      faded: false,
+      label: 'وقف الخسارة',
+    });
+    plan.targets.forEach((t, i) => {
+      const n = String(i + 1);
+      lines.push({
+        id: `plan:${active.id}:tp${n}`,
+        from,
+        to: null,
+        price: t.price,
+        kind: 'plan-target',
+        dashed: i < active.targets_hit,
+        faded: i < active.targets_hit,
+        label: `TP${n}`,
+      });
+    });
+  }
+  return { lines, labels };
+}
+
 export function buildOverlayModel(
   snapshot: AnalysisSnapshot | null,
   toggles: OverlayToggles,
+  signal: SignalView | null = null,
 ): OverlayModel {
   if (!snapshot?.analysis_ready) return EMPTY_MODEL;
   const zones: OverlayZone[] = [];
@@ -292,6 +414,10 @@ export function buildOverlayModel(
       label: 'OTE',
     });
   }
+
+  const sig = signalOverlay(signal, toggles, snapshot.forming_time ?? null);
+  lines.push(...sig.lines);
+  labels.push(...sig.labels);
 
   return { zones, lines, labels };
 }

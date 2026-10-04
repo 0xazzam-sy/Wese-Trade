@@ -1,4 +1,6 @@
+import { applySignalEvent, SIGNAL_EVENTS } from '@/features/signals/lib/reduce';
 import type { AnalysisSnapshot } from '@/types/analysis';
+import type { SignalView } from '@/types/signal';
 import type { CandleBar, MarketFeedState, StreamState, Timeframe } from '@/types/market';
 import type { EventEnvelope } from '@/types/realtime';
 
@@ -12,6 +14,8 @@ export interface StreamHandlers {
   onError?: (code: string) => void;
   /** Backend analysis for this stream (`analysis.update`, full or live). */
   onAnalysis?: (snapshot: AnalysisSnapshot) => void;
+  /** Signal view of this stream after each `signal.*` event (reduced, display only). */
+  onSignal?: (view: SignalView) => void;
 }
 
 type TickHandler = (price: string, timestamp: string) => void;
@@ -46,6 +50,8 @@ export class MarketFeed {
     string,
     { full?: AnalysisSnapshot; live?: AnalysisSnapshot }
   >();
+  /** Latest reduced signal view per stream (replayed to charts joining an existing stream). */
+  private readonly signals = new Map<string, SignalView>();
   private connectedOnce = false;
 
   attach(client: RealtimeClient): void {
@@ -76,6 +82,21 @@ export class MarketFeed {
         }
         this.dispatch(e, (h) => h.onAnalysis?.(snapshot));
       }),
+      ...SIGNAL_EVENTS.map((type) =>
+        client.subscribe(type, (e) => {
+          const { symbol, timeframe } = e.data;
+          if (typeof symbol !== 'string' || typeof timeframe !== 'string') return;
+          const key = keyOf(symbol, timeframe as Timeframe);
+          if (!this.streams.has(key)) return;
+          const view = applySignalEvent(this.signals.get(key) ?? null, type, e.data, {
+            symbol,
+            timeframe,
+          });
+          if (!view) return;
+          this.signals.set(key, view);
+          this.dispatchKey(key, (h) => h.onSignal?.(view));
+        }),
+      ),
       client.subscribe('market.resync', (e) => {
         this.dispatch(e, (h) => h.onResync?.());
       }),
@@ -120,6 +141,8 @@ export class MarketFeed {
     const cached = this.analysis.get(key);
     if (cached?.full) handlers.onAnalysis?.(cached.full);
     if (cached?.live) handlers.onAnalysis?.(cached.live);
+    const signal = this.signals.get(key);
+    if (signal) handlers.onSignal?.(signal);
     return () => {
       const current = this.streams.get(key);
       if (!current) return;
@@ -127,6 +150,7 @@ export class MarketFeed {
       if (current.handlers.size === 0) {
         this.streams.delete(key);
         this.analysis.delete(key);
+        this.signals.delete(key);
         this.client?.send('market.unsubscribe', { symbol, timeframe });
       }
     };

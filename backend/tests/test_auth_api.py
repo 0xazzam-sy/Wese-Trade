@@ -111,8 +111,12 @@ async def test_logout_clears_cookie(client: httpx.AsyncClient, admin_user: User)
 async def test_placeholder_groups_are_protected_and_honest(
     client: httpx.AsyncClient, admin_user: User
 ) -> None:
-    for group in ("markets", "signals", "scanner", "backtests"):
+    for group in ("markets", "scanner"):
         assert (await client.get(f"/api/v1/{group}/status")).status_code == 401
+    assert (
+        await client.get("/api/v1/signals/BTCUSDT", params={"timeframe": "5m"})
+    ).status_code == 401
+    assert (await client.get("/api/v1/backtests")).status_code == 401
     assert (await client.get("/api/v1/markets/symbols")).status_code == 401
     assert (await client.get("/api/v1/news")).status_code == 401
 
@@ -121,10 +125,12 @@ async def test_placeholder_groups_are_protected_and_honest(
     assert (await client.get("/api/v1/markets/symbols")).json() == {
         "detail": "market_data_disabled"
     }
-    for group in ("signals", "scanner", "backtests"):
-        body = (await client.get(f"/api/v1/{group}/status")).json()
-        assert body["module"] == group
-        assert body["available"] is False
+    body = (await client.get("/api/v1/scanner/status")).json()
+    assert body["module"] == "scanner"
+    assert body["available"] is False
+    signal = await client.get("/api/v1/signals/BTCUSDT", params={"timeframe": "5m"})
+    assert signal.json() == {"detail": "market_data_disabled"}  # honest, never fabricated
+    assert (await client.get("/api/v1/backtests")).json() == {"items": []}
 
     news = (await client.get("/api/v1/news")).json()
     assert news["items"] == []

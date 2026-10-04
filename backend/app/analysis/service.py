@@ -24,7 +24,7 @@ import contextlib
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Protocol
 
 from app.analysis.config import DEFAULT_CONFIG, AnalysisConfig
 from app.analysis.engine import AnalysisOrderError, MarketAnalyzer
@@ -65,6 +65,16 @@ LIVE_FIELDS = (
     "premium_discount",
     "ote",
 )
+
+
+class AnalysisListener(Protocol):
+    """In-process observer (the signal service). Called synchronously; must not block."""
+
+    def on_seeded(self, key: AppKey, analyzer: MarketAnalyzer) -> None: ...
+
+    def on_closed(self, key: AppKey, analyzer: MarketAnalyzer) -> None: ...
+
+    def on_forming(self, key: AppKey) -> None: ...
 
 
 def not_ready_frame(timeframe: Timeframe) -> MtfFrame:
@@ -133,6 +143,7 @@ class AnalysisService:
         self._loop: asyncio.Task[None] | None = None
         self._lock = asyncio.Lock()
         self.stats = {"full_sent": 0, "live_sent": 0, "reseeds": 0, "seed_failures": 0}
+        self.listeners: list[AnalysisListener] = []
         market.candle_listeners.append(self.on_candle)
         market.resync_listeners.append(self.on_resync)
 
@@ -272,6 +283,14 @@ class AnalysisService:
         )
         self._publish_full(entry)
         self._publish_dependents(entry.key)
+        self._notify("on_seeded", entry.key, analyzer)
+
+    def _notify(self, method: str, *args: Any) -> None:
+        for listener in self.listeners:
+            try:
+                getattr(listener, method)(*args)
+            except Exception:
+                logger.exception("analysis.listener_failed")
 
     def _remember(self, entry: _Entry, candle: Candle) -> None:
         entry.recent[candle.open_ms] = candle
@@ -300,6 +319,7 @@ class AnalysisService:
             if analyzer.last_open_ms is None or candle.open_ms > analyzer.last_open_ms:
                 entry.forming = candle
                 entry.dirty = True
+                self._notify("on_forming", entry.key)
             return
         last = analyzer.last_open_ms
         if last is not None and candle.open_ms <= last:
@@ -321,6 +341,7 @@ class AnalysisService:
         entry.reason = analyzer.readiness()
         self._publish_full(entry)
         self._publish_dependents(entry.key)
+        self._notify("on_closed", entry.key, analyzer)
 
     def on_resync(self, key: AppKey) -> None:
         entry = self._entries.get(key)
@@ -337,6 +358,21 @@ class AnalysisService:
             else:
                 frames.append(not_ready_frame(ctf))
         return frames
+
+    def analyzer(self, key: AppKey) -> MarketAnalyzer | None:
+        entry = self._entries.get(key)
+        return entry.analyzer if entry is not None and entry.state == "ready" else None
+
+    def forming(self, key: AppKey) -> Candle | None:
+        entry = self._entries.get(key)
+        return entry.forming if entry is not None else None
+
+    def consumers(self, key: AppKey) -> set[str]:
+        entry = self._entries.get(key)
+        return set(entry.consumers) if entry is not None else set()
+
+    def context_frames(self, key: AppKey) -> list[MtfFrame]:
+        return self._context(key)
 
     def snapshot(self, key: AppKey) -> AnalysisSnapshot | None:
         entry = self._entries.get(key)
@@ -448,6 +484,15 @@ class AnalysisService:
             "structure_events": to_payload(sorted(events, key=lambda e: (e.time, e.layer))),
             "sweeps": to_payload(sweeps),
         }
+
+    async def on_demand(self, key: AppKey) -> tuple[MarketAnalyzer, Candle | None, list[MtfFrame]]:
+        """Analyzer for any key (live if subscribed, else built from REST history, cached)."""
+        analyzer, forming = await self._on_demand_analyzer(key)
+        frames = []
+        for ctf in context_timeframes(key[1]):
+            ctx, _ = await self._on_demand_analyzer((key[0], ctf))
+            frames.append(ctx.frame())
+        return analyzer, forming, frames
 
     async def _on_demand_analyzer(self, key: AppKey) -> tuple[MarketAnalyzer, Candle | None]:
         entry = self._entries.get(key)

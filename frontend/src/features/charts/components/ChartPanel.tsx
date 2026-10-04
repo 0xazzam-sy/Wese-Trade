@@ -42,7 +42,7 @@ export function ChartPanel({ chartId, className }: { chartId: ChartId; className
   const onController = useCallback((controller: ChartController | null) => {
     controllerRef.current = controller;
   }, []);
-  const { load, stream, analysis, reload } = useMarketChart(
+  const { load, stream, analysis, signal, reload } = useMarketChart(
     controllerRef,
     selection.symbol,
     selection.timeframe,
@@ -56,17 +56,22 @@ export function ChartPanel({ chartId, className }: { chartId: ChartId; className
   const toggles = useOverlayStore((s) => s.toggles);
   const theme = useThemeStore((s) => s.theme);
   const setAnalysis = useAnalysisStore((s) => s.setAnalysis);
+  const setSignal = useAnalysisStore((s) => s.setSignal);
   useEffect(() => {
-    overlay.setModel(buildOverlayModel(analysis, toggles), readOverlayPalette());
-  }, [overlay, analysis, toggles, theme]);
+    overlay.setModel(buildOverlayModel(analysis, toggles, signal), readOverlayPalette());
+  }, [overlay, analysis, signal, toggles, theme]);
   useEffect(() => {
     setAnalysis(chartId, analysis);
   }, [chartId, analysis, setAnalysis]);
+  useEffect(() => {
+    setSignal(chartId, signal);
+  }, [chartId, signal, setSignal]);
   useEffect(
     () => () => {
       setAnalysis(chartId, null);
+      setSignal(chartId, null);
     },
-    [chartId, setAnalysis],
+    [chartId, setAnalysis, setSignal],
   );
 
   // Auto-retry while the backend is still loading exchange metadata.

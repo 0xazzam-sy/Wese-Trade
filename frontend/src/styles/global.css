@@ -36,6 +36,11 @@
   --color-neutral-soft: var(--ns-neutral-soft);
   --color-warning: var(--ns-warning);
   --color-warning-soft: var(--ns-warning-soft);
+  --color-sig-strong-buy: var(--ns-sig-strong-buy);
+  --color-sig-buy: var(--ns-sig-buy);
+  --color-sig-neutral: var(--ns-sig-neutral);
+  --color-sig-sell: var(--ns-sig-sell);
+  --color-sig-strong-sell: var(--ns-sig-strong-sell);
 
   --shadow-panel: var(--ns-shadow-panel);
   --shadow-pop: var(--ns-shadow-pop);

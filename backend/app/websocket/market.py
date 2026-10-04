@@ -13,6 +13,7 @@ from app.core.logging import get_logger
 from app.market_data.engine import MarketDataEngine
 from app.market_data.exceptions import MarketDataError, SymbolUnavailable, UnknownSymbol
 from app.market_data.timeframes import Timeframe
+from app.signal_engine.service import SignalService
 from app.websocket.events import ClientMessage, EventEnvelope, EventType
 from app.websocket.manager import ClientConnection
 
@@ -29,6 +30,7 @@ async def handle_market_message(
     market: MarketDataEngine | None,
     message: ClientMessage,
     analysis: AnalysisService | None = None,
+    signals: SignalService | None = None,
 ) -> None:
     """A market subscription also subscribes the stream's analysis (`analysis.update`)."""
     symbol = message.data.get("symbol")
@@ -79,3 +81,5 @@ async def handle_market_message(
             await analysis.subscribe(connection.id, resolved.symbol, timeframe)
         except Exception:  # analysis must never break the market subscription
             logger.exception("analysis.subscribe_failed")
+    if signals is not None:
+        signals.subscribe(connection.id, (resolved.symbol, timeframe))
