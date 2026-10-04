@@ -49,9 +49,13 @@ class Settings(BaseSettings):
     )
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
-    # Prepared for future phases; unused in phase 1.
+    # Market data (phase 2): BingX public endpoints, no API keys required.
+    market_data_enabled: bool = True
     bingx_base_url: str = "https://open-api.bingx.com"
     bingx_ws_url: str = "wss://open-api-swap.bingx.com/swap-market"
+    market_stale_after_seconds: float = Field(default=60.0, ge=5)
+
+    # Prepared for future phases; unused so far.
     news_provider: str | None = None
     news_api_key: str | None = None
 

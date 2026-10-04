@@ -1,12 +1,7 @@
-import {
-  CandlestickSeries,
-  createChart,
-  type IChartApi,
-  type ISeriesApi,
-} from 'lightweight-charts';
+import { CandlestickSeries, createChart, type IChartApi } from 'lightweight-charts';
 import { useEffect, useRef } from 'react';
 
-import { type ChartCandle, priceFormatFor } from '@/features/charts/lib/candles';
+import { ChartController } from '@/features/charts/lib/ChartController';
 import {
   buildCandlestickOptions,
   buildChartOptions,
@@ -16,11 +11,10 @@ import { OverlayController } from '@/features/charts/overlays/OverlayController'
 import type { ChartOverlay } from '@/features/charts/overlays/types';
 import { cn } from '@/lib/cn';
 import { useThemeStore } from '@/stores/themeStore';
-import type { SymbolMeta } from '@/types/market';
 
 interface CandlestickChartProps {
-  candles: readonly ChartCandle[];
-  meta: SymbolMeta | null;
+  /** Receives the controller once the chart exists (null on unmount). Must be stable. */
+  onController: (controller: ChartController | null) => void;
   overlays?: readonly ChartOverlay[];
   className?: string;
 }
@@ -28,22 +22,22 @@ interface CandlestickChartProps {
 const NO_OVERLAYS: readonly ChartOverlay[] = [];
 
 /**
- * Presentation-only wrapper around lightweight-charts v5.
- * Owns the chart instance lifecycle; receives fully prepared data via props.
+ * Presentation-only wrapper around lightweight-charts v5. The chart instance is created
+ * once; data flows in imperatively through ChartController (no React re-render per tick).
  */
 export function CandlestickChart({
-  candles,
-  meta,
+  onController,
   overlays = NO_OVERLAYS,
   className,
 }: CandlestickChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const overlaysRef = useRef<OverlayController | null>(null);
+  const seriesOptionsRef = useRef<((palette: ReturnType<typeof readChartPalette>) => void) | null>(
+    null,
+  );
   const theme = useThemeStore((s) => s.theme);
 
-  // Create / destroy the chart instance.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -51,37 +45,29 @@ export function CandlestickChart({
     const chart = createChart(container, buildChartOptions(palette));
     const series = chart.addSeries(CandlestickSeries, buildCandlestickOptions(palette));
     chartRef.current = chart;
-    seriesRef.current = series;
+    const controller = new ChartController(series, () => {
+      chart.timeScale().fitContent();
+    });
+    seriesOptionsRef.current = (p) => {
+      series.applyOptions(buildCandlestickOptions(p));
+    };
     overlaysRef.current = new OverlayController({ chart, series });
+    onController(controller);
 
     return () => {
       overlaysRef.current?.clear();
       overlaysRef.current = null;
-      seriesRef.current = null;
+      onController(null);
       chartRef.current = null;
       chart.remove();
     };
-  }, []);
+  }, [onController]);
 
-  // Re-theme when the app theme changes (CSS variables are already updated).
   useEffect(() => {
     const palette = readChartPalette();
     chartRef.current?.applyOptions(buildChartOptions(palette));
-    seriesRef.current?.applyOptions(buildCandlestickOptions(palette));
+    seriesOptionsRef.current?.(palette);
   }, [theme]);
-
-  // Price precision / tick size from exchange metadata.
-  useEffect(() => {
-    const priceFormat = priceFormatFor(meta);
-    if (priceFormat) seriesRef.current?.applyOptions({ priceFormat });
-  }, [meta]);
-
-  useEffect(() => {
-    const series = seriesRef.current;
-    if (!series) return;
-    series.setData([...candles]);
-    if (candles.length > 0) chartRef.current?.timeScale().fitContent();
-  }, [candles]);
 
   useEffect(() => {
     overlaysRef.current?.sync(overlays);

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from app.auth.rate_limit import LoginRateLimiter
 from app.core.config import Settings
 from app.db.session import Database
+from app.market_data.engine import MarketDataEngine
 from app.websocket.manager import ConnectionManager
 
 
@@ -16,3 +17,4 @@ class AppResources:
     database: Database
     login_limiter: LoginRateLimiter
     connections: ConnectionManager
+    market: MarketDataEngine | None = None

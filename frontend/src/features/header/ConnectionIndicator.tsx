@@ -20,7 +20,7 @@ export function ConnectionIndicator() {
       className="bg-sunken border-line flex h-8 items-center gap-2 rounded-full border px-3"
     >
       <StatusDot tone={tone} />
-      <span className="text-fg-muted text-xs font-medium">{text}</span>
+      <span className="text-fg-muted text-xs font-medium">النظام: {text}</span>
     </div>
   );
 }

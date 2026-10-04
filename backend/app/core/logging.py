@@ -77,6 +77,9 @@ def configure_logging(level: str, *, json_output: bool) -> None:
         uv_logger.propagate = True
     # SQL echo is noisy; enable explicitly when debugging queries.
     logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+    # Per-request exchange logs would flood INFO; our own market.* events cover transitions.
+    for noisy in ("httpx", "httpcore", "websockets"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
 def get_logger(name: str) -> logging.Logger:

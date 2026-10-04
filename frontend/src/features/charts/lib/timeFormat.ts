@@ -8,7 +8,7 @@ const LOCALE = 'en-GB'; // Latin digits, 24h; axis labels stay compact and LTR.
 
 const fmt = {
   year: new Intl.DateTimeFormat(LOCALE, { year: 'numeric' }),
-  month: new Intl.DateTimeFormat(LOCALE, { month: 'short', year: '2-digit' }),
+  month: new Intl.DateTimeFormat(LOCALE, { month: 'short' }),
   day: new Intl.DateTimeFormat(LOCALE, { day: '2-digit', month: 'short' }),
   time: new Intl.DateTimeFormat(LOCALE, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }),
   seconds: new Intl.DateTimeFormat(LOCALE, {

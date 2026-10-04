@@ -3,6 +3,8 @@ import { type ReactNode, useEffect } from 'react';
 
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { cn } from '@/lib/cn';
+import { useSymbols } from '@/features/markets/queries';
+import { useChartStore } from '@/stores/chartStore';
 import { type ChartLayout, useLayoutStore } from '@/stores/layoutStore';
 
 import { ChartPanel } from './ChartPanel';
@@ -17,6 +19,7 @@ export function ChartWorkspace() {
   const setLayout = useLayoutStore((s) => s.setChartLayout);
   const maximized = useLayoutStore((s) => s.maximizedChart);
   const restore = useLayoutStore((s) => s.restore);
+  useDefaultSymbols();
 
   useEffect(() => {
     if (!maximized) return;
@@ -60,4 +63,23 @@ export function ChartWorkspace() {
       </div>
     </div>
   );
+}
+
+/**
+ * Once the real symbol list loads, replace any selection that BingX does not list as active
+ * (e.g. a persisted symbol that no longer exists) with the backend default (BTCUSDT if
+ * available, else the first active symbol). Never hardcodes the list itself.
+ */
+function useDefaultSymbols(): void {
+  const { data } = useSymbols();
+  const charts = useChartStore((s) => s.charts);
+  const setSymbol = useChartStore((s) => s.setSymbol);
+
+  useEffect(() => {
+    if (!data?.default_symbol) return;
+    const active = new Set(data.items.map((s) => s.symbol));
+    for (const id of ['primary', 'secondary'] as const) {
+      if (!active.has(charts[id].symbol)) setSymbol(id, data.default_symbol);
+    }
+  }, [data, charts, setSymbol]);
 }

@@ -1,10 +1,11 @@
 import { cn } from '@/lib/cn';
 
-export type StatusTone = 'ok' | 'pending' | 'error' | 'idle';
+export type StatusTone = 'ok' | 'pending' | 'warning' | 'error' | 'idle';
 
 const tones: Record<StatusTone, string> = {
   ok: 'bg-bull shadow-[0_0_8px_var(--ns-bull)]',
   pending: 'bg-warning animate-pulse',
+  warning: 'bg-warning',
   error: 'bg-bear',
   idle: 'bg-neutral',
 };

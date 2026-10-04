@@ -1,6 +1,6 @@
 import { ChartWorkspace } from '@/features/charts/components/ChartWorkspace';
 import { NewsPanel } from '@/features/news/NewsPanel';
-import { ScannerSidebar } from '@/features/scanner/ScannerSidebar';
+import { MarketOverview } from '@/features/markets/MarketOverview';
 import { SignalPanel } from '@/features/signals/SignalPanel';
 import { SystemIdentity } from '@/features/system/SystemIdentity';
 
@@ -22,7 +22,7 @@ export function DashboardPage() {
         <SignalPanel />
       </div>
 
-      <ScannerSidebar />
+      <MarketOverview />
     </div>
   );
 }

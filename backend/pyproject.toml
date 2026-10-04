@@ -33,7 +33,7 @@ known-first-party = ["app", "tests"]
 known-third-party = ["alembic"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "S105", "S106"]
+"tests/**" = ["S101", "S105", "S106", "PT018", "ASYNC109", "ASYNC110", "SLF001"]
 "alembic/**" = ["N999"]
 
 [tool.ruff.format]
@@ -54,6 +54,9 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 asyncio_default_test_loop_scope = "function"
 testpaths = ["tests"]
+# Live BingX tests hit the real public API; run explicitly with `pytest -m live`.
+addopts = "-m 'not live'"
+markers = ["live: calls the real BingX public API (network required, no API keys)"]
 filterwarnings = [
   "error::DeprecationWarning:app.*",
   # Starlette's TestClient (used only for WebSocket tests) nudges towards httpx2.

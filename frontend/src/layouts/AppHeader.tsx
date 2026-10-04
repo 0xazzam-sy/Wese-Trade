@@ -2,6 +2,7 @@ import { LogoMark, Wordmark } from '@/components/ui/Logo';
 import { AccountMenu } from '@/features/header/AccountMenu';
 import { ConnectionIndicator } from '@/features/header/ConnectionIndicator';
 import { HeaderClock } from '@/features/header/HeaderClock';
+import { MarketFeedIndicator } from '@/features/header/MarketFeedIndicator';
 import { ThemeToggle } from '@/features/header/ThemeToggle';
 import { WeatherWidget } from '@/features/weather/WeatherWidget';
 
@@ -13,6 +14,7 @@ export function AppHeader() {
         <Wordmark />
       </div>
       <ConnectionIndicator />
+      <MarketFeedIndicator />
 
       <div className="ms-auto flex items-center gap-3">
         <HeaderClock />

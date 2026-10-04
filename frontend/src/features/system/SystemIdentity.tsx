@@ -4,7 +4,9 @@ import { LogoMark, Wordmark } from '@/components/ui/Logo';
 import { NeuralBackdrop } from '@/components/ui/NeuralBackdrop';
 import { StatusDot, type StatusTone } from '@/components/ui/StatusDot';
 import { systemApi } from '@/services/api/system';
+import { marketFeedLabel } from '@/features/markets/marketFeedLabel';
 import { useConnectionStore } from '@/stores/connectionStore';
+import { useMarketStore } from '@/stores/marketStore';
 
 function Row({ label, value, tone }: { label: string; value: string; tone: StatusTone }) {
   return (
@@ -26,6 +28,10 @@ export function SystemIdentity() {
     refetchInterval: 30_000,
   });
   const realtime = useConnectionStore((s) => s.state);
+  const market = marketFeedLabel(
+    realtime,
+    useMarketStore((s) => s.feed),
+  );
 
   const api: [string, StatusTone] = health.isPending
     ? ['جاري الفحص', 'pending']
@@ -63,7 +69,7 @@ export function SystemIdentity() {
         <Row label="الخادم" value={api[0]} tone={api[1]} />
         <Row label="قاعدة البيانات" value={db[0]} tone={db[1]} />
         <Row label="الاتصال اللحظي" value={ws[0]} tone={ws[1]} />
-        <Row label="مزود البيانات BingX" value="غير مفعّل" tone="idle" />
+        <Row label="بيانات BingX" value={market.text} tone={market.tone} />
       </ul>
       <p className="text-fg-subtle text-2xs relative mt-2 leading-5">
         منصة تحليل فقط — لا يتم تنفيذ أي صفقات.

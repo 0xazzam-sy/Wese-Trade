@@ -15,6 +15,7 @@ from app.core.config import API_V1_PREFIX, BACKEND_DIR, Settings, get_settings
 from app.core.logging import configure_logging, get_logger
 from app.core.state import AppResources
 from app.db.session import Database
+from app.market_data.factory import build_market_engine
 from app.websocket.events import CLOSE_SERVER_SHUTDOWN
 from app.websocket.manager import ConnectionManager
 
@@ -25,11 +26,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     configure_logging(settings.log_level, json_output=settings.is_production)
 
+    connections = ConnectionManager()
     resources = AppResources(
         settings=settings,
         database=Database(settings),
         login_limiter=LoginRateLimiter(),
-        connections=ConnectionManager(),
+        connections=connections,
+        market=build_market_engine(settings, connections) if settings.market_data_enabled else None,
     )
 
     @asynccontextmanager
@@ -44,7 +47,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             logger.info("db.connected")
         else:
             logger.error("db.unavailable: check DATABASE_URL and run `alembic upgrade head`")
+        if resources.market is not None:
+            # Starts in the background: an exchange outage never blocks or crashes startup.
+            await resources.market.start()
         yield
+        if resources.market is not None:
+            await resources.market.stop()
         await resources.connections.close_all(CLOSE_SERVER_SHUTDOWN, "server_shutdown")
         await resources.database.dispose()
         logger.info("app.stopped")

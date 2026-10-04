@@ -15,6 +15,7 @@ from app.api.deps import resolve_user_from_token
 from app.auth.tokens import ACCESS_COOKIE_NAME, InvalidTokenError, decode_access_token
 from app.core.logging import get_logger
 from app.core.state import AppResources
+from app.market_data.engine import MarketDataEngine
 from app.utils.time import utc_now
 from app.websocket.events import (
     CLOSE_SESSION_EXPIRED,
@@ -24,6 +25,7 @@ from app.websocket.events import (
     EventType,
 )
 from app.websocket.manager import ClientConnection
+from app.websocket.market import handle_market_message
 
 router = APIRouter(tags=["realtime"])
 logger = get_logger(__name__)
@@ -47,7 +49,9 @@ async def _heartbeat(connection: ClientConnection, interval: float, expires_at: 
             return
 
 
-async def _handle_message(connection: ClientConnection, raw: str) -> None:
+async def _handle_message(
+    connection: ClientConnection, market: MarketDataEngine | None, raw: str
+) -> None:
     if len(raw.encode()) > MAX_CLIENT_MESSAGE_BYTES:
         await connection.send(
             EventEnvelope.of(EventType.SYSTEM_ERROR, {"code": "message_too_large"})
@@ -61,6 +65,8 @@ async def _handle_message(connection: ClientConnection, raw: str) -> None:
 
     if message.type == EventType.SYSTEM_PING:
         await connection.send(EventEnvelope.of(EventType.SYSTEM_PONG, {"echo": message.data}))
+    elif message.type in (EventType.MARKET_SUBSCRIBE, EventType.MARKET_UNSUBSCRIBE):
+        await handle_market_message(connection, market, message)
     else:
         await connection.send(
             EventEnvelope.of(
@@ -112,13 +118,17 @@ async def realtime(websocket: WebSocket) -> None:
                 },
             )
         )
+        if resources.market is not None:
+            await connection.send(resources.market.status_event())
         while True:
             raw = await websocket.receive_text()
-            await _handle_message(connection, raw)
+            await _handle_message(connection, resources.market, raw)
     except WebSocketDisconnect:
         pass
     finally:
         heartbeat.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await heartbeat
-        resources.connections.unregister(connection)
+        if resources.market is not None:
+            await resources.market.release_all(connection.id)
+        await resources.connections.unregister(connection)

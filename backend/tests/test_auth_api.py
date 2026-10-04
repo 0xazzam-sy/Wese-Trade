@@ -113,10 +113,15 @@ async def test_placeholder_groups_are_protected_and_honest(
 ) -> None:
     for group in ("markets", "signals", "scanner", "backtests"):
         assert (await client.get(f"/api/v1/{group}/status")).status_code == 401
+    assert (await client.get("/api/v1/markets/symbols")).status_code == 401
     assert (await client.get("/api/v1/news")).status_code == 401
 
     await _login(client)
-    for group in ("markets", "signals", "scanner", "backtests"):
+    # Market data disabled in this test config -> honest 503, never fake data.
+    assert (await client.get("/api/v1/markets/symbols")).json() == {
+        "detail": "market_data_disabled"
+    }
+    for group in ("signals", "scanner", "backtests"):
         body = (await client.get(f"/api/v1/{group}/status")).json()
         assert body["module"] == group
         assert body["available"] is False

@@ -1,9 +1,11 @@
 import { useEffect } from 'react';
 
 import { resolveWsUrl } from '@/lib/env';
+import { marketFeed } from '@/services/realtime/marketFeed';
 import { RealtimeClient } from '@/services/realtime/RealtimeClient';
 import { useAuthStore } from '@/stores/authStore';
 import { useConnectionStore } from '@/stores/connectionStore';
+import { useMarketStore } from '@/stores/marketStore';
 
 /**
  * Owns the single app-wide realtime connection while the user is authenticated.
@@ -37,6 +39,8 @@ export function useRealtimeConnection(): void {
     };
 
     activeClient = client;
+    marketFeed.attach(client);
+    const offStatus = marketFeed.onStatus(useMarketStore.getState().setFeed);
     setReconnect(() => {
       client.reconnectNow();
     });
@@ -46,6 +50,9 @@ export function useRealtimeConnection(): void {
     return () => {
       window.removeEventListener('online', onOnline);
       unsubscribe();
+      offStatus();
+      marketFeed.detach();
+      useMarketStore.getState().setFeed(null);
       client.disconnect();
       if (activeClient === client) activeClient = null;
       setReconnect(null);

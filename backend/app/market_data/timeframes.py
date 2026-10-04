@@ -1,7 +1,8 @@
-"""Supported analysis timeframes.
+"""Canonical analysis timeframes, owned by the backend.
 
-Note: BingX perpetual futures do not offer a native 10-minute kline interval. The 10m
-timeframe must be aggregated from 5m (or 1m) candles aligned to UTC epoch boundaries.
+BingX perpetual futures have no native 10-minute kline. `10m` is synthetic: it is
+aggregated from 5m candles bucketed on UTC epoch boundaries (see services/aggregation.py).
+The frontend never needs to know which timeframes are native.
 """
 
 from __future__ import annotations
@@ -22,13 +23,27 @@ class Timeframe(StrEnum):
         return _SECONDS[self]
 
     @property
-    def is_native_on_bingx(self) -> bool:
-        return self is not Timeframe.M10
+    def milliseconds(self) -> int:
+        return _SECONDS[self] * 1000
+
+    @property
+    def is_synthetic(self) -> bool:
+        return self is Timeframe.M10
+
+    @property
+    def source(self) -> Timeframe:
+        """Native timeframe whose exchange stream feeds this one (itself if native)."""
+        return Timeframe.M5 if self is Timeframe.M10 else self
 
     @property
     def aggregation_source(self) -> Timeframe | None:
         """Lower timeframe used to build this one when the exchange lacks it."""
         return Timeframe.M5 if self is Timeframe.M10 else None
+
+    def bucket_start_ms(self, timestamp_ms: int) -> int:
+        """Floor a UTC epoch-millisecond timestamp to this timeframe's bucket start."""
+        size = self.milliseconds
+        return timestamp_ms - (timestamp_ms % size)
 
 
 _SECONDS: dict[Timeframe, int] = {

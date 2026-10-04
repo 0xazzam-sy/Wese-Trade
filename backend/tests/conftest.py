@@ -30,6 +30,7 @@ def settings(tmp_path: Path) -> Settings:
         frontend_origin=[FRONTEND_ORIGIN],
         log_level="WARNING",
         ws_heartbeat_seconds=0.2,
+        market_data_enabled=False,
         _env_file=None,
     )
 

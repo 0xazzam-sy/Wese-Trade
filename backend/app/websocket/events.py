@@ -22,9 +22,17 @@ class EventType(StrEnum):
     SYSTEM_PONG = "system.pong"  # server -> client reply to ping
     SYSTEM_ERROR = "system.error"  # protocol errors (bad message etc.)
 
-    # --- Reserved for later phases (never emitted in phase 1) -----------------
-    MARKET_TICK = "market.tick"
-    MARKET_CANDLE = "market.candle"
+    # --- Market data (phase 2) -------------------------------------------------
+    MARKET_TICK = "market.tick"  # latest price for a subscribed symbol
+    MARKET_CANDLE = "market.candle"  # forming / closed candle for a subscribed stream
+    MARKET_STATUS = "market.status"  # exchange feed state (connected/reconnecting/...)
+    MARKET_STREAM = "market.stream"  # per-stream state: live | stale | reconnecting | unavailable
+    MARKET_RESYNC = "market.resync"  # history changed (gap recovery): refetch it
+    MARKET_SUBSCRIBE = "market.subscribe"  # client -> server
+    MARKET_UNSUBSCRIBE = "market.unsubscribe"  # client -> server
+    MARKET_SUBSCRIBED = "market.subscribed"  # ack
+
+    # --- Reserved for later phases (never emitted yet) -------------------------
     SIGNAL_LIVE = "signal.live"
     SIGNAL_CONFIRMED = "signal.confirmed"
     SCANNER_UPDATE = "scanner.update"
