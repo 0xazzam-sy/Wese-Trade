@@ -236,3 +236,20 @@ async def test_stale_and_recovery_reach_synthetic_10m_consumers(
         "timeframe": "10m",
         "state": "live",
     }
+
+
+async def test_status_broadcast_follows_rest_reachability(
+    setup: tuple[MarketDataEngine, FakeProvider, FakePublisher],
+) -> None:
+    engine, provider, publisher = setup
+    # Exchange socket reconnects while REST is still failing, then REST recovers.
+    engine.health.record_rest(False, "ConnectError")
+    assert publisher.broadcasts[-1].data["state"] == "degraded"
+    await provider.set_state("reconnecting")
+    await provider.set_state("connected")
+    assert publisher.broadcasts[-1].data["state"] == "degraded"
+    engine.health.record_rest(True, None)
+    assert publisher.broadcasts[-1].data["state"] == "connected"
+    count = len(publisher.broadcasts)
+    engine.health.record_rest(True, None)  # no change -> no extra broadcast
+    assert len(publisher.broadcasts) == count

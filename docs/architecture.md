@@ -86,8 +86,13 @@ must match `FRONTEND_ORIGIN`.
 | `system.ping`      | C → S     | 1     | Client keep-alive (every 15s)                   |
 | `system.pong`      | S → C     | 1     | Reply to ping                                   |
 | `system.error`     | S → C     | 1     | Protocol errors (`invalid_message`, …)          |
-| `market.tick`      | S → C     | 2     | Last price update (decimal strings)             |
-| `market.candle`    | S → C     | 2     | Candle update (`is_closed` flags finality)      |
+| `market.subscribe` | C → S     | 2     | `{symbol, timeframe}`; ack `market.subscribed`  |
+| `market.unsubscribe` | C → S   | 2     | Release a subscription (also on disconnect)     |
+| `market.tick`      | S → C     | 2     | Latest price for subscribed symbols             |
+| `market.candle`    | S → C     | 2     | `{symbol, timeframe, candle:{time,o,h,l,c,v,is_closed}}` |
+| `market.stream`    | S → C     | 2     | Per stream: `live` / `stale` / `reconnecting` / `unavailable` |
+| `market.resync`    | S → C     | 2     | History changed (gap recovery): refetch it      |
+| `market.status`    | S → C     | 2     | Exchange feed: connected/connecting/reconnecting/degraded/disconnected |
 | `signal.live`      | S → C     | 3     | Developing signal (may change until close)      |
 | `signal.confirmed` | S → C     | 3     | Signal confirmed at candle close                |
 | `scanner.update`   | S → C     | 3     | Scanner row changes                             |
@@ -103,7 +108,7 @@ nothing arrives for 45s.
 
 - **Prices are `Decimal`** in the backend and **decimal strings** on the wire. They are converted
   to JS numbers only at the chart-rendering boundary.
-- **Tick size and precision come from exchange metadata** (`SymbolInfo`), never hardcoded.
+- **Tick size and precision come from exchange metadata** (`MarketSymbol`), never hardcoded.
 - **All timestamps are UTC** internally and in storage. Candles are keyed by their UTC
   open time. The UI converts to the browser timezone for display only.
 - Supported timeframes: `1m, 5m, 10m, 15m, 30m, 1h`.
@@ -112,6 +117,30 @@ nothing arrives for 45s.
 - Symbols are displayed as `BTCUSDT`. The provider maps them to exchange-native names
   (`BTC-USDT`).
 - Public market data needs no API keys. NeuralShot has no order or position endpoints.
+
+### Phase 2 implementation (see `docs/bingx-market-data.md` for BingX specifics)
+
+```
+BingX REST + WS ─► bingx/ (rest.py, stream.py, parser.py, provider.py)    exchange-specific
+                      │  MarketDataProvider protocol (provider.py)
+                      ▼
+               services/  symbol_service · ticker_service · candle_service
+                          aggregation (10m) · subscription_manager · cache · health
+                      ▼
+               engine.py  MarketDataEngine: live state, ref-counted subscriptions,
+                          stale detection, finalization, gap recovery
+                      ▼
+      api/v1/endpoints/markets.py (REST)     websocket/market.py + ConnectionManager (WS)
+```
+
+- Routes and the WebSocket talk only to `MarketDataEngine`/services, never to BingX.
+- One shared exchange socket. App keys `(symbol, timeframe)` are reference-counted onto
+  native exchange streams (10m → 5m), so the future scanner can reuse the same manager.
+- Each browser connection has a bounded outbound queue and its own writer task, so a slow
+  client never blocks the market feed.
+- Frontend: `MarketFeed` routes events by `(symbol, timeframe)`. `ChartController` applies
+  `series.update()` with ordering invariants. `useMarketChart` runs per chart with
+  generation guards, so switching symbol or timeframe can never show stale candles.
 
 ---
 

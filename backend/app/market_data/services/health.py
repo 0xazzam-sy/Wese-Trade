@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -28,6 +29,8 @@ class MarketHealth:
     gap_recoveries: int = 0
     active_streams: list[str] = field(default_factory=list)
     stale_streams: list[str] = field(default_factory=list)
+    # Called after anything that may change `overall` (set by the engine to broadcast).
+    on_change: Callable[[], None] | None = field(default=None, repr=False)
 
     def record_rest(self, ok: bool, error: str | None) -> None:
         now = utc_now()
@@ -35,7 +38,8 @@ class MarketHealth:
             self.last_rest_success_at = now
             if self.rest_reachable is not True:
                 logger.info("market.rest_available")
-            self.rest_reachable = True
+                self.rest_reachable = True
+                self._changed()
             return
         if error == "rate_limited":
             self.rate_limited_count += 1
@@ -44,7 +48,12 @@ class MarketHealth:
         self.last_rest_error_at = now
         if self.rest_reachable is not False:
             logger.warning("market.rest_unavailable", extra={"fields": {"error": error}})
-        self.rest_reachable = False
+            self.rest_reachable = False
+            self._changed()
+
+    def _changed(self) -> None:
+        if self.on_change is not None:
+            self.on_change()
 
     @property
     def overall(self) -> str:

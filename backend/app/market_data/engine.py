@@ -73,6 +73,8 @@ class MarketDataEngine:
         self._tasks: set[asyncio.Task[Any]] = set()
         self._monitor: asyncio.Task[None] | None = None
         self._lock = asyncio.Lock()
+        self._last_status: str | None = None
+        self.health.on_change = self._broadcast_status_if_changed
 
     # --- lifecycle ------------------------------------------------------------
     async def start(self) -> None:
@@ -224,7 +226,7 @@ class MarketDataEngine:
             and self.health.reconnect_count != self.provider.stream_stats.reconnect_count
         ):
             self.health.reconnect_count = self.provider.stream_stats.reconnect_count
-        self.publisher.broadcast(self.status_event())
+        self._broadcast_status_if_changed()
         if previous == "connected" and state != "connected":
             for key in self.subscriptions.app_keys:
                 self._publish_stream_state(key)
@@ -321,11 +323,17 @@ class MarketDataEngine:
         self._publish_candles(changed)
 
     def _refresh_stale_list(self) -> None:
-        before = self.health.overall
         self.health.stale_streams = [
             _label(k) for k in self.subscriptions.native_keys if self.candles.stream(*k).stale
         ]
-        if self.health.overall != before:  # e.g. connected <-> degraded
+        self._broadcast_status_if_changed()
+
+    def _broadcast_status_if_changed(self) -> None:
+        """Broadcast market.status whenever the overall state changes, whatever the cause
+        (exchange socket, REST reachability or stale streams)."""
+        overall = self.health.overall
+        if overall != self._last_status:
+            self._last_status = overall
             self.publisher.broadcast(self.status_event())
 
     # --- status payloads ----------------------------------------------------------

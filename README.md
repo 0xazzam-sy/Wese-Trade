@@ -6,15 +6,29 @@ markets.
 > **Analysis only.** NeuralShot never places orders, has no trading endpoints, and needs no
 > exchange API keys.
 
-**Current status: Phase 1 (foundation).** This phase includes:
+**Current status: Phase 2 (BingX market data).**
+
+Phase 1 (foundation) provides:
 - authentication and roles
 - database and migrations
 - the internal WebSocket
-- the workstation UI shell (two charts, scanner, news and signal panels)
+- the RTL workstation UI
 - dark and light themes
 
-Market data, signals, scanner, news and backtesting are **not implemented yet**. Their
-panels show explicit empty states. No fake data is shown anywhere.
+Phase 2 adds real, read-only BingX perpetual futures data:
+- the live symbol list
+- historical and realtime candles on both charts for 1m, 5m, 10m (built from 5m), 15m,
+  30m and 1h
+- live prices and 24h change
+- funding, open interest and best bid/ask
+- a market overview list
+- feed health, stale detection and gap recovery
+
+Signals, the scanner, news and backtesting are **not implemented yet**. Their panels show
+explicit placeholders ("--"), and no fake data is shown anywhere.
+
+BingX details, assumptions and validation status are in
+[`docs/bingx-market-data.md`](docs/bingx-market-data.md).
 
 ---
 
@@ -147,6 +161,7 @@ macOS / Linux / Git Bash:
 | Web app                  | http://localhost:5173                   |
 | API (direct)             | http://127.0.0.1:8000/api/v1            |
 | Health check             | http://127.0.0.1:8000/api/v1/health     |
+| Market feed health       | http://127.0.0.1:8000/api/v1/markets/health (logged in) |
 | API docs (dev only)      | http://127.0.0.1:8000/api/docs          |
 | WebSocket (via Vite)     | ws://localhost:5173/api/v1/ws           |
 
@@ -166,6 +181,7 @@ browser uses one origin and the secure httpOnly session cookie just works.
 | New migration           | `alembic revision --autogenerate -m "describe"`    |
 | Create admin            | `python -m app.scripts.create_admin`               |
 | Tests                   | `pytest`                                           |
+| Live BingX tests (internet) | `pytest -m live`                               |
 | Lint                    | `ruff check .`                                     |
 | Format                  | `ruff format .`                                    |
 | Type-check (strict)     | `mypy app tests alembic`                           |
@@ -206,8 +222,8 @@ neuralshot/
 │   │   ├── models/          ORM models (users)
 │   │   ├── schemas/         Pydantic request/response models
 │   │   ├── services/        Domain logic (users, health)
-│   │   ├── websocket/       Event envelope, connection manager, /ws endpoint
-│   │   ├── market_data/     Normalized types + provider protocol (no BingX code yet)
+│   │   ├── websocket/       Event envelope, per-client queues, /ws + market protocol
+│   │   ├── market_data/     Models, provider protocol, bingx/ adapter, services/, engine
 │   │   ├── signal_engine/   Contracts only (labels, states, Strategy protocol)
 │   │   ├── backtesting/     Contracts only
 │   │   ├── scanner/         Contracts only
@@ -222,14 +238,15 @@ neuralshot/
 │       ├── app/             Root component, router, query client
 │       ├── layouts/         App shell + header
 │       ├── pages/           Login, dashboard, 404
-│       ├── features/        auth, charts, scanner, news, signals, header, weather, realtime
+│       ├── features/        auth, charts, markets, news, signals, header, weather, realtime
 │       ├── components/ui/   Design-system primitives
 │       ├── stores/          Zustand stores
-│       ├── services/        REST clients, WebSocket client, weather service
+│       ├── services/        REST clients, WebSocket client + MarketFeed, weather service
 │       ├── types/           Wire/domain types
 │       ├── lib/             env, http, formatting helpers
 │       └── styles/          Design tokens (dark/light) + global CSS
 ├── docs/architecture.md     Architecture + future domain contracts
+├── docs/bingx-market-data.md  BingX API usage, assumptions, validation status
 └── scripts/                 dev.sh (run both), check.sh (all quality gates)
 ```
 
@@ -252,7 +269,10 @@ For design decisions and the future analysis pipeline, see
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | no       | Default 720 (12 h)                           |
 | `FRONTEND_ORIGIN`             | no       | Comma-separated; used for CORS + WS origin   |
 | `LOG_LEVEL`                   | no       | Default `INFO`                               |
-| `BINGX_BASE_URL`, `BINGX_WS_URL`, `NEWS_PROVIDER`, `NEWS_API_KEY` | no | Reserved for later phases |
+| `MARKET_DATA_ENABLED`         | no       | Default `true`; `false` disables BingX entirely |
+| `BINGX_BASE_URL`, `BINGX_WS_URL` | no    | Public BingX endpoints (no API keys needed) |
+| `MARKET_STALE_AFTER_SECONDS`  | no       | Default 60; silence after which a stream is shown as stale |
+| `NEWS_PROVIDER`, `NEWS_API_KEY` | no     | Reserved for later phases |
 
 **Frontend** (`frontend/.env.local`, optional):
 
@@ -265,6 +285,11 @@ For design decisions and the future analysis pipeline, see
 ---
 
 ## Troubleshooting
+
+- **Charts say "جاري إعادة الاتصال بـ BingX..." / health shows `rest_reachable: false`**:
+  the machine cannot reach `open-api.bingx.com` or `open-api-swap.bingx.com`. Check your
+  internet, firewall or proxy. The app keeps running and recovers by itself once BingX is
+  reachable.
 
 - **Login says the server is unreachable**: make sure the backend (step 7) is running on
   port 8000.
