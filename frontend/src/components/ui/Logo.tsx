@@ -1,6 +1,6 @@
 import { cn } from '@/lib/cn';
 
-/** NeuralShot mark: three connected nodes (neural motif) forming an upward stroke. */
+/** Wese Trade mark: three connected nodes forming an upward stroke. */
 export function LogoMark({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 32 32" fill="none" aria-hidden className={cn('size-8', className)}>
@@ -25,7 +25,7 @@ export function LogoMark({ className }: { className?: string }) {
 export function Wordmark({ className }: { className?: string }) {
   return (
     <span className={cn('ns-ltr text-fg text-base font-semibold tracking-tight', className)}>
-      Neural<span className="text-accent">Shot</span>
+      Wese <span className="text-accent">Trade</span>
     </span>
   );
 }

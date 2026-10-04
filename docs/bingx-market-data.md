@@ -1,3 +1,10 @@
+> **HISTORICAL DOCUMENT — BingX is no longer used.**
+> NeuralShot was renamed **Wese Trade** and its market-data provider was migrated from BingX to
+> **OKX public market data** on 2026-10-04. BingX was never reachable from the build
+> environment (egress policy and later a geo-block), and its runtime code has been removed.
+> The current provider is documented in [`okx-market-data.md`](okx-market-data.md).
+> This file is kept only as migration history.
+
 # BingX market data (Phase 2)
 
 NeuralShot reads **public** BingX USDT-M perpetual futures market data. It needs no API

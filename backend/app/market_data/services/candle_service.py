@@ -1,8 +1,9 @@
 """Candle history + live state per (symbol, native timeframe).
 
-Live finalization is deliberately conservative: BingX kline pushes carry no "final" flag,
-so a live candle is marked closed ONLY when a newer candle for the same stream arrives,
-or when a REST reconciliation returns it as a completed bucket. Never on a timer alone.
+Live finalization: when the provider flags closed candles explicitly (OKX `confirm=1`,
+`confirms_closed=True`), that flag is used directly and a closed candle is emitted once and
+never reopened. Without such a flag, a live candle is marked closed only when a newer
+candle arrives or REST returns it as completed; never on a timer alone.
 """
 
 from __future__ import annotations
@@ -45,24 +46,72 @@ class CandleStream:
     stale: bool = False
     last_update: float | None = None  # monotonic seconds
     reconcile_requested_for: int | None = None
+    # Closed candles we finalized by inference (a newer candle arrived first). Only these may
+    # still be corrected by a later authoritative close; exchange/REST-confirmed ones are final.
+    inferred_closed: set[int] = field(default_factory=set)
 
     @property
     def latest_closed_ms(self) -> int | None:
         return max(self.closed) if self.closed else None
 
-    def _store_closed(self, candle: Candle) -> None:
+    def _store_closed(self, candle: Candle, *, inferred: bool = False) -> None:
         self.closed[candle.open_ms] = candle
+        if inferred:
+            self.inferred_closed.add(candle.open_ms)
+        else:
+            self.inferred_closed.discard(candle.open_ms)
         if len(self.closed) > MAX_STORED_CANDLES:
             for key in sorted(self.closed)[: len(self.closed) - MAX_STORED_CANDLES]:
                 del self.closed[key]
 
-    def apply_live(self, candle: Candle) -> LiveResult:
-        """Apply one exchange push. Returns the events to publish, oldest first."""
+    def apply_live(self, candle: Candle, *, trust_close: bool = False) -> LiveResult:
+        """Apply one exchange push. Returns the events to publish, oldest first.
+
+        trust_close=True: the exchange flags closed candles explicitly (OKX `confirm`), so a
+        closed push finalizes that candle immediately and exactly once. Otherwise pushes are
+        never trusted as final and a candle closes only when a newer one arrives.
+        A finalized candle is never reopened by a later forming push.
+        """
         self.last_update = time.monotonic()
-        candle = replace(candle, is_closed=False)  # WS pushes are never trusted as final
+        if not trust_close:
+            candle = replace(candle, is_closed=False)
         step = self.timeframe.milliseconds
         latest_closed = self.latest_closed_ms
         forming = self.forming
+        stored = self.closed.get(candle.open_ms)
+
+        if stored is not None:
+            # Already final. Only an authoritative close may correct a candle we had merely
+            # inferred as closed; exchange- or REST-confirmed candles never change again.
+            if (
+                candle.is_closed
+                and candle.open_ms in self.inferred_closed
+                and not stored.same_values(candle)
+            ):
+                self._store_closed(candle)
+                return LiveResult([candle])
+            if candle.is_closed:  # same values: the inferred close is now confirmed
+                self.inferred_closed.discard(candle.open_ms)
+            return LiveResult([])
+
+        if candle.is_closed:
+            self._store_closed(candle)
+            events: list[Candle] = []
+            if forming is not None and forming.open_ms < candle.open_ms:
+                # Missed the older candle's close: finalize it from its last state.
+                final = forming.closed()
+                self._store_closed(final, inferred=True)
+                events.append(final)
+            if forming is not None and forming.open_ms <= candle.open_ms:
+                self.forming = None
+            events.append(candle)
+            # Gap: the closed candle starts after the next candle we expected to see.
+            if forming is not None:
+                expected: int | None = forming.open_ms + step
+            else:
+                expected = latest_closed + step if latest_closed is not None else None
+            gap = expected is not None and candle.open_ms > expected
+            return LiveResult(events, gap=gap)
 
         if forming is None:
             if latest_closed is not None and candle.open_ms <= latest_closed:
@@ -79,7 +128,7 @@ class CandleStream:
 
         if candle.open_ms > forming.open_ms:
             final = forming.closed()
-            self._store_closed(final)
+            self._store_closed(final, inferred=True)
             self.forming = candle
             gap = candle.open_ms > forming.open_ms + step
             return LiveResult([final, candle], gap=gap)

@@ -1,9 +1,9 @@
 """MarketDataEngine: the single owner of live market state.
 
-    provider (BingX) -> normalization -> services (symbols, tickers, candles, 10m) ->
+    provider (OKX) -> normalization -> services (symbols, tickers, candles, 10m) ->
     cache / live state -> Publisher (app WebSocket) + REST routes
 
-Nothing here knows about FastAPI or BingX wire formats.
+Nothing here knows about FastAPI or exchange wire formats.
 """
 
 from __future__ import annotations
@@ -15,9 +15,9 @@ from collections.abc import Coroutine, Iterable
 from typing import Any, Protocol
 
 from app.core.logging import get_logger
-from app.market_data.bingx.exceptions import MarketDataError
-from app.market_data.models import Candle, MarketSymbol
-from app.market_data.provider import MarketDataProvider
+from app.market_data.exceptions import MarketDataError
+from app.market_data.models import Candle, LiveQuote, MarketSymbol
+from app.market_data.provider import FEED_CANDLES, FEED_QUOTES, MarketDataProvider
 from app.market_data.services.aggregation import LiveAggregator
 from app.market_data.services.candle_service import CandleService, now_ms
 from app.market_data.services.events import candle_event, dec
@@ -68,6 +68,7 @@ class MarketDataEngine:
         self.subscriptions = SubscriptionManager()
         self._aggregators: dict[str, LiveAggregator] = {}
         self._last_tick: dict[str, tuple[str, float]] = {}
+        self._last_quote: dict[str, float] = {}  # symbol -> monotonic time of last quote
         self._stale_after = stale_after
         self._monitor_interval = monitor_interval
         self._tasks: set[asyncio.Task[Any]] = set()
@@ -79,7 +80,10 @@ class MarketDataEngine:
     # --- lifecycle ------------------------------------------------------------
     async def start(self) -> None:
         self.provider.set_stream_handlers(
-            on_candle=self._on_candle, on_state=self._on_state, on_reconnected=self._on_reconnected
+            on_candle=self._on_candle,
+            on_quote=self._on_quote,
+            on_state=self._on_state,
+            on_reconnected=self._on_reconnected,
         )
         self.symbols.on_unavailable = self._on_symbols_unavailable
         await self.provider.start()
@@ -107,20 +111,36 @@ class MarketDataEngine:
         """Raises UnknownSymbol / SymbolUnavailable. Idempotent per consumer."""
         market = self.symbols.require_active(symbol)
         async with self._lock:
+            before = self.subscriptions.symbols
             change = self.subscriptions.acquire(consumer, (market.symbol, timeframe))
             await self._apply(change)
+            await self._sync_quotes(before)
         self.publisher.send_to([consumer], self._stream_state_event((market.symbol, timeframe)))
         return market
 
     async def unsubscribe(self, consumer: str, symbol: str, timeframe: Timeframe) -> None:
         key = (symbol.strip().upper(), timeframe)
         async with self._lock:
+            before = self.subscriptions.symbols
             await self._apply(self.subscriptions.release(consumer, key))
+            await self._sync_quotes(before)
 
     async def release_all(self, consumer: str) -> None:
         async with self._lock:
+            before = self.subscriptions.symbols
             for change in self.subscriptions.release_all(consumer):
                 await self._apply(change)
+            await self._sync_quotes(before)
+
+    async def _sync_quotes(self, before: set[str]) -> None:
+        """One quotes subscription (last/bid/ask/mark) per symbol with any chart on it."""
+        after = self.subscriptions.symbols
+        for symbol in sorted(after - before):
+            await self.provider.subscribe_quotes(self.symbols.get(symbol))
+        for symbol in sorted(before - after):
+            self.tickers.forget_live(symbol)
+            with contextlib.suppress(MarketDataError):
+                await self.provider.unsubscribe_quotes(self.symbols.get(symbol))
 
     async def _apply(self, change: SubscriptionChange) -> None:
         if change.native_added is not None:
@@ -166,7 +186,7 @@ class MarketDataEngine:
         stream = self.candles.existing(candle.symbol, candle.timeframe)
         if stream is None or not stream.live:
             return  # late push for a stream we already released
-        self.health.last_ws_message_at = utc_now()
+        self.health.last_candle_message_at = utc_now()
         if stream.stale:
             stream.stale = False
             self._refresh_stale_list()
@@ -177,9 +197,10 @@ class MarketDataEngine:
             # Notify every app key fed by this native stream (e.g. 10m charts on a 5m stream).
             for key in self.subscriptions.app_keys_for_native((candle.symbol, candle.timeframe)):
                 self._publish_stream_state(key)
-        result = stream.apply_live(candle)
+        result = stream.apply_live(candle, trust_close=self.provider.confirms_closed)
         self._publish_candles(result.events)
-        if result.events:
+        if result.events and self.health.quote_feed_state != "connected":
+            # Fallback price source while the quotes feed is down.
             last = result.events[-1]
             self._maybe_tick(last.symbol, last.close)
         if result.gap:
@@ -206,6 +227,15 @@ class MarketDataEngine:
                         ten, EventEnvelope.of(EventType.MARKET_CANDLE, candle_event(item))
                     )
 
+    async def _on_quote(self, quote: LiveQuote) -> None:
+        if quote.symbol not in self.subscriptions.symbols:
+            return  # late push for a released symbol
+        self.health.last_quote_message_at = utc_now()
+        self._last_quote[quote.symbol] = time.monotonic()
+        self.tickers.update_live(quote)
+        if quote.last is not None:
+            self._maybe_tick(quote.symbol, quote.last)
+
     def _maybe_tick(self, symbol: str, price: Any) -> None:
         text = dec(price) or ""
         now = time.monotonic()
@@ -218,25 +248,31 @@ class MarketDataEngine:
             payload = {"symbol": symbol, "price": text, "timestamp": utc_isoformat(utc_now())}
             self.publisher.send_to(consumers, EventEnvelope.of(EventType.MARKET_TICK, payload))
 
-    async def _on_state(self, state: str) -> None:
-        previous = self.health.ws_state
-        self.health.ws_state = state
-        if (
-            state != "connected"
-            and self.health.reconnect_count != self.provider.stream_stats.reconnect_count
-        ):
-            self.health.reconnect_count = self.provider.stream_stats.reconnect_count
+    async def _on_state(self, feed: str, state: str) -> None:
+        self.health.reconnect_count = sum(f.reconnect_count for f in self.provider.feeds.values())
+        if feed == FEED_QUOTES:
+            self.health.quote_feed_state = state
+            self._broadcast_status_if_changed()
+            return
+        previous = self.health.candle_feed_state
+        self.health.candle_feed_state = state
         self._broadcast_status_if_changed()
         if previous == "connected" and state != "connected":
             for key in self.subscriptions.app_keys:
                 self._publish_stream_state(key)
 
-    async def _on_reconnected(self) -> None:
-        self.health.reconnect_count = self.provider.stream_stats.reconnect_count
+    async def _on_reconnected(self, feed: str) -> None:
+        self.health.reconnect_count = sum(f.reconnect_count for f in self.provider.feeds.values())
+        if feed != FEED_CANDLES:
+            return  # quotes resubscribe with a fresh snapshot; nothing to reconcile
         natives = sorted(self.subscriptions.native_keys)
         logger.info("market.gap_recovery_started", extra={"fields": {"streams": len(natives)}})
-        for native in natives:
-            await self._recover(native, reason="reconnect")
+        self.health.gap_recovery_in_progress = True
+        try:
+            for native in natives:
+                await self._recover(native, reason="reconnect")
+        finally:
+            self.health.gap_recovery_in_progress = False
 
     async def _recover(self, native: NativeKey, *, reason: str) -> None:
         """Reconcile recent candles from REST, then tell clients to resync."""
@@ -289,16 +325,22 @@ class MarketDataEngine:
                 logger.exception("market.monitor_failed")
 
     def check_streams(self) -> None:
-        """Mark silent streams STALE and ask REST to finalize candles whose bucket ended."""
-        if self.health.ws_state != "connected":
+        """Mark silent streams STALE and ask REST to finalize candles whose bucket ended.
+
+        A candle stream is stale when it has been silent for `stale_after` while its symbol
+        is visibly trading (quotes arrived meanwhile), or for 3x `stale_after` regardless.
+        A merely quiet instrument (no quotes either) is not treated as a broken feed.
+        """
+        if self.health.candle_feed_state != "connected":
             return
         now_mono, current_ms = time.monotonic(), now_ms()
         for native in self.subscriptions.native_keys:
             stream = self.candles.stream(*native)
-            if (
-                stream.last_update is not None
-                and not stream.stale
-                and now_mono - stream.last_update > self._stale_after
+            silent = now_mono - stream.last_update if stream.last_update is not None else 0.0
+            last_quote = self._last_quote.get(native[0])
+            trading = last_quote is not None and now_mono - last_quote < self._stale_after
+            if not stream.stale and (
+                (silent > self._stale_after and trading) or silent > 3 * self._stale_after
             ):
                 stream.stale = True
                 logger.warning("market.stream_stale", extra={"fields": {"stream": _label(native)}})
@@ -338,7 +380,7 @@ class MarketDataEngine:
 
     # --- status payloads ----------------------------------------------------------
     def stream_state(self, key: AppKey) -> str:
-        if self.health.ws_state != "connected":
+        if self.health.candle_feed_state != "connected":
             return "reconnecting"
         stream = self.candles.existing(key[0], key[1].source)
         if stream is not None and stream.stale:
@@ -366,12 +408,20 @@ class MarketDataEngine:
 
     def health_snapshot(self) -> dict[str, Any]:
         snapshot = self.health.snapshot()
-        stats = self.provider.stream_stats
-        snapshot["reconnect_count"] = stats.reconnect_count
-        if stats.last_message_monotonic is not None:
-            snapshot["seconds_since_last_ws_message"] = round(
-                time.monotonic() - stats.last_message_monotonic, 1
+        feeds: dict[str, Any] = {}
+        for name, stats in self.provider.feeds.items():
+            age = (
+                round(time.monotonic() - stats.last_message_monotonic, 1)
+                if stats.last_message_monotonic is not None
+                else None
             )
+            feeds[name] = {
+                "state": stats.state,
+                "reconnect_count": stats.reconnect_count,
+                "seconds_since_last_message": age,
+            }
+        snapshot["feeds"] = feeds
+        snapshot["reconnect_count"] = sum(f["reconnect_count"] for f in feeds.values())
         return snapshot
 
 

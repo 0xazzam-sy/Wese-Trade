@@ -14,7 +14,7 @@ export function useSymbols() {
     queryFn: ({ signal }) => marketsApi.symbols(signal),
     staleTime: 10 * 60_000,
     refetchInterval: 15 * 60_000,
-    retry: (count) => count < 20, // backend may still be loading metadata from BingX
+    retry: (count) => count < 20, // backend may still be loading metadata from the exchange
     retryDelay: (attempt) => Math.min(30_000, 1000 * 2 ** attempt),
   });
 }

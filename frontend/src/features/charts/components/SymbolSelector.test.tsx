@@ -24,6 +24,8 @@ const sym = (base: string, precision = 2): MarketSymbol => ({
   min_notional: null,
   max_leverage: 100,
   trading_enabled: true,
+  contract_value: '0.01',
+  contract_value_currency: base,
 });
 
 const SYMBOLS = [sym('BTC', 1), sym('ETH'), sym('ETHFI'), sym('WBTC'), sym('SOL')];

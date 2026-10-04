@@ -17,7 +17,7 @@ interface SymbolSelectorProps {
   onChange: (symbol: SymbolCode) => void;
 }
 
-/** Searchable, keyboard-accessible, virtualized list of all active BingX USDT perpetuals. */
+/** Searchable, keyboard-accessible, virtualized list of all active OKX USDT perpetual swaps. */
 export function SymbolSelector({ value, onChange }: SymbolSelectorProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');

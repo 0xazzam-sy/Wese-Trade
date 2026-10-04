@@ -9,7 +9,7 @@ interface ThemeState {
   toggleTheme: () => void;
 }
 
-export const THEME_STORAGE_KEY = 'neuralshot.theme';
+export const THEME_STORAGE_KEY = 'wesetrade.theme';
 
 export function applyThemeToDocument(theme: Theme): void {
   document.documentElement.dataset.theme = theme;

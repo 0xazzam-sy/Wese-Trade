@@ -47,7 +47,7 @@ export function ChartBodyState({
         compact
         icon={<Ban className="size-5" />}
         title="هذا العقد غير متاح حالياً"
-        description="قد يكون العقد موقوفاً أو أُزيل من BingX. اختر عقداً آخر."
+        description="قد يكون العقد موقوفاً أو أُزيل من OKX. اختر عقداً آخر."
       />
     );
   } else if (load.status === 'error') {
@@ -55,8 +55,8 @@ export function ChartBodyState({
       load.code === 'rate_limited'
         ? 'تم تجاوز حد الطلبات مؤقتاً. أعد المحاولة بعد قليل.'
         : load.code === 'loading_metadata'
-          ? 'جاري تحميل قائمة العقود من BingX.'
-          : 'تعذر تحميل بيانات السوق من BingX.';
+          ? 'جاري تحميل قائمة العقود من OKX.'
+          : 'تعذر تحميل بيانات السوق من OKX.';
     content = (
       <div className="flex flex-col items-center gap-2">
         <EmptyState

@@ -1,8 +1,9 @@
-"""Market data routes. Thin: all data comes from MarketDataEngine services, never BingX directly."""
+"""Market data routes. Thin: all data comes from MarketDataEngine services, never the exchange."""
 
 from __future__ import annotations
 
 import contextlib
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
@@ -10,13 +11,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.api.deps import Resources, get_current_user
 from app.core.logging import get_logger
-from app.market_data.bingx.exceptions import (
-    BingXRateLimited,
+from app.market_data.engine import MarketDataEngine
+from app.market_data.exceptions import (
     MarketDataError,
+    ProviderRateLimited,
     SymbolUnavailable,
     UnknownSymbol,
 )
-from app.market_data.engine import MarketDataEngine
 from app.market_data.timeframes import Timeframe
 from app.schemas.market import (
     BookOut,
@@ -55,7 +56,7 @@ def _translate(exc: MarketDataError) -> HTTPException:
         return HTTPException(status.HTTP_404_NOT_FOUND, detail="unknown_symbol")
     if isinstance(exc, SymbolUnavailable):
         return HTTPException(status.HTTP_409_CONFLICT, detail="symbol_unavailable")
-    if isinstance(exc, BingXRateLimited):
+    if isinstance(exc, ProviderRateLimited):
         return HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="market_data_rate_limited",
@@ -161,7 +162,9 @@ async def get_details(symbol: str, engine: Engine) -> SymbolDetails:
         ticker = TickerOut.of(found) if found else None
     with contextlib.suppress(MarketDataError):
         info = (await engine.tickers.funding()).get(market.symbol)
-        funding = FundingOut.of(info) if info else None
+        mark = await engine.tickers.mark_price(market.symbol)
+        if info is not None:
+            funding = FundingOut.of(replace(info, mark_price=mark[0] if mark else None))
     with contextlib.suppress(MarketDataError):
         open_interest = OpenInterestOut.of(await engine.tickers.open_interest(market))
     with contextlib.suppress(MarketDataError):

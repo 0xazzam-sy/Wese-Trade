@@ -11,8 +11,8 @@ from fastapi.testclient import TestClient
 from app.core.config import Settings
 from app.core.state import AppResources
 from app.main import create_app
-from app.market_data.bingx.exceptions import BingXRateLimited
 from app.market_data.engine import MarketDataEngine
+from app.market_data.exceptions import ProviderRateLimited
 from app.market_data.timeframes import Timeframe
 from app.models.user import User
 from tests.conftest import ADMIN_PASSWORD, ADMIN_USERNAME, FRONTEND_ORIGIN
@@ -103,7 +103,7 @@ async def test_exchange_outage_and_rate_limit_map_to_503(
     assert (await client.get("/api/v1/health")).status_code == 200  # app unaffected
 
     async def limited() -> list[object]:
-        raise BingXRateLimited(7)
+        raise ProviderRateLimited(7)
 
     provider.fail_rest = False
     provider.fetch_tickers = limited  # type: ignore[method-assign,assignment]
@@ -116,31 +116,40 @@ async def test_tickers_details_and_health(
     market_client: tuple[httpx.AsyncClient, MarketDataEngine, FakeProvider],
 ) -> None:
     client, _, provider = market_client
-    from app.market_data.bingx.parser import parse_funding, parse_tickers
+    from app.market_data.okx.parser import parse_funding, parse_mark_prices, parse_tickers
     from app.utils.time import utc_now
 
     async def tickers() -> list[object]:
-        return parse_tickers(fx.TICKERS, now=utc_now())  # type: ignore[return-value]
+        return parse_tickers(fx.TICKERS)  # type: ignore[return-value]
 
     async def funding() -> list[object]:
-        return parse_funding(fx.PREMIUM_INDEX, now=utc_now())  # type: ignore[return-value]
+        return parse_funding(fx.FUNDING, now=utc_now())  # type: ignore[return-value]
+
+    async def marks() -> object:
+        return parse_mark_prices(fx.MARK_PRICES)
 
     provider.fetch_tickers = tickers  # type: ignore[method-assign,assignment]
     provider.fetch_funding = funding  # type: ignore[method-assign,assignment]
+    provider.fetch_mark_prices = marks  # type: ignore[method-assign,assignment]
     items = (await client.get("/api/v1/markets/tickers")).json()["items"]
     btc = next(t for t in items if t["symbol"] == "BTCUSDT")
-    assert btc["last_price"] == "16880.5"
-    assert btc["price_change_percent"] == "0.31"
+    assert btc["last_price"] == "84972.5"
+    assert btc["volume_24h"] == "18775.1171"
+    assert btc["quote_volume_24h"] is None
 
     details = (await client.get("/api/v1/markets/BTCUSDT/details")).json()
     assert details["symbol"]["symbol"] == "BTCUSDT"
-    assert details["ticker"]["high_24h"] == "16897.5"
-    assert details["funding"]["funding_rate"] == "0.0001"
+    assert details["ticker"]["high_24h"] == "85044.6"
+    assert details["funding"]["funding_rate"] == "0.0000289853709374"
+    assert details["funding"]["mark_price"] == "84972.3"
+    assert details["funding"]["next_funding_time"] == "2026-10-04T08:00:00Z"
+    assert details["symbol"]["contract_value"] == "0.01"
     assert details["open_interest"] is None  # source failed -> omitted, not faked
     assert details["book"] is None
 
     health = (await client.get("/api/v1/markets/health")).json()
-    assert health["provider"] == "bingx"
+    assert health["provider"] == "okx"
+    assert set(health["feeds"]) == {"candles", "quotes"}
     assert health["symbol_count"] == 2
     assert "active_streams" in health
 
@@ -176,7 +185,7 @@ def test_ws_market_subscription_flow(
     with client.websocket_connect("/api/v1/ws", headers={"origin": FRONTEND_ORIGIN}) as ws:
         assert ws.receive_json()["type"] == "system.status"
         status = _receive_until(ws, "market.status")
-        assert status["data"]["provider"] == "bingx"  # type: ignore[index]
+        assert status["data"]["provider"] == "okx"  # type: ignore[index]
 
         ws.send_json({"type": "market.subscribe", "data": {"symbol": "btcusdt", "timeframe": "1m"}})
         ack = _receive_until(ws, "market.subscribed")
@@ -222,4 +231,4 @@ def test_engine_built_from_settings_when_enabled(settings: Settings) -> None:
     app = create_app(settings.model_copy(update={"market_data_enabled": True}))
     resources: AppResources = app.state.resources
     assert resources.market is not None
-    assert resources.market.provider.name == "bingx"
+    assert resources.market.provider.name == "okx"

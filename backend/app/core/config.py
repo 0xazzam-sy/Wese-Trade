@@ -33,12 +33,12 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
-    app_name: str = "NeuralShot"
+    app_name: str = "Wese Trade"
     app_env: Environment = Environment.DEVELOPMENT
     app_host: str = "127.0.0.1"
     app_port: int = Field(default=8000, ge=1, le=65535)
 
-    database_url: str = "sqlite+aiosqlite:///./data/neuralshot.db"
+    database_url: str = "sqlite+aiosqlite:///./data/wese_trade.db"
 
     # Required: no default, so a missing secret fails fast at startup.
     secret_key: str = Field(min_length=32)
@@ -49,10 +49,11 @@ class Settings(BaseSettings):
     )
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
-    # Market data (phase 2): BingX public endpoints, no API keys required.
+    # Market data: OKX PUBLIC endpoints only. No API key, secret, passphrase or login.
     market_data_enabled: bool = True
-    bingx_base_url: str = "https://open-api.bingx.com"
-    bingx_ws_url: str = "wss://open-api-swap.bingx.com/swap-market"
+    okx_rest_url: str = "https://openapi.okx.com"
+    okx_public_ws_url: str = "wss://ws.okx.com/ws/v5/public"  # port 443 (not 8443)
+    okx_business_ws_url: str = "wss://ws.okx.com/ws/v5/business"  # candle channels
     market_stale_after_seconds: float = Field(default=60.0, ge=5)
 
     # Prepared for future phases; unused so far.

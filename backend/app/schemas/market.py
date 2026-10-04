@@ -33,6 +33,8 @@ class SymbolOut(DecimalModel):
     min_notional: Decimal | None
     max_leverage: int | None
     trading_enabled: bool
+    contract_value: Decimal | None
+    contract_value_currency: str | None
 
     @classmethod
     def of(cls, s: MarketSymbol) -> SymbolOut:
@@ -51,6 +53,8 @@ class SymbolOut(DecimalModel):
             min_notional=s.min_notional,
             max_leverage=s.max_leverage,
             trading_enabled=s.trading_enabled,
+            contract_value=s.contract_value,
+            contract_value_currency=s.contract_value_currency,
         )
 
 
@@ -114,12 +118,16 @@ class FundingOut(DecimalModel):
 
 
 class OpenInterestOut(DecimalModel):
-    value: Decimal
+    """Every unit the exchange reports, explicitly (never mixed)."""
+
+    contracts: Decimal | None
+    base: Decimal | None
+    usd: Decimal | None
     timestamp: datetime
 
     @classmethod
     def of(cls, o: OpenInterest) -> OpenInterestOut:
-        return cls(value=o.value, timestamp=o.timestamp)
+        return cls(contracts=o.contracts, base=o.base, usd=o.usd, timestamp=o.timestamp)
 
 
 class BookOut(DecimalModel):

@@ -21,9 +21,9 @@ interface Row {
 }
 
 /**
- * Market overview (NOT a scanner): real BingX prices and 24h change only.
+ * Market overview (NOT a scanner): real OKX prices and 24h change only.
  * Signal and confidence columns stay "--" until the signal engine exists.
- * Sorted by 24h quote volume — a liquidity ordering, not a ranking or recommendation.
+ * Sorted by 24h turnover (base volume × last price) — a liquidity ordering, not a ranking.
  */
 export function MarketOverview() {
   const [query, setQuery] = useState('');
@@ -41,9 +41,10 @@ export function MarketOverview() {
       ticker: tickerMap.get(s.symbol),
     }));
     if (!deferred) {
-      matched.sort(
-        (a, b) => Number(b.ticker?.quote_volume_24h ?? 0) - Number(a.ticker?.quote_volume_24h ?? 0),
-      );
+      // Liquidity ordering only (not a ranking): base volume x last price.
+      const turnover = (t: Ticker | undefined) =>
+        t ? Number(t.volume_24h) * Number(t.last_price) || 0 : 0;
+      matched.sort((a, b) => turnover(b.ticker) - turnover(a.ticker));
     }
     return matched;
   }, [symbols.data, tickers.data, deferred]);

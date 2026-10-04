@@ -38,6 +38,9 @@ export interface MarketSymbol {
   min_notional: DecimalString | null;
   max_leverage: number | null;
   trading_enabled: boolean;
+  /** Contract size: step/min quantities are in contracts of this value. */
+  contract_value: DecimalString | null;
+  contract_value_currency: string | null;
 }
 
 export interface SymbolList {
@@ -55,7 +58,9 @@ export interface Ticker {
   open_price: DecimalString | null;
   high_24h: DecimalString;
   low_24h: DecimalString;
+  /** 24h volume in the BASE currency (e.g. BTC). */
   volume_24h: DecimalString;
+  /** Not provided by OKX for swaps (never estimated). */
   quote_volume_24h: DecimalString | null;
   bid: DecimalString | null;
   ask: DecimalString | null;
@@ -94,7 +99,13 @@ export interface SymbolDetails {
     index_price: DecimalString | null;
     next_funding_time: string | null;
   } | null;
-  open_interest: { value: DecimalString; timestamp: string } | null;
+  /** Every unit the exchange reports; units are never mixed. */
+  open_interest: {
+    contracts: DecimalString | null;
+    base: DecimalString | null;
+    usd: DecimalString | null;
+    timestamp: string;
+  } | null;
   book: { bid: DecimalString; ask: DecimalString; spread: DecimalString } | null;
 }
 

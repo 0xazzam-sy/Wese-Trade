@@ -3,7 +3,7 @@
 App-level keys are what consumers (browser connections today, the scanner later) ask for:
 (symbol, timeframe). Each maps to ONE native exchange stream (10m -> 5m). Exchange streams
 are opened when their first dependent key appears and closed when the last one goes away,
-so two charts on BTCUSDT 5m and 10m share a single BingX `BTC-USDT@kline_5m` stream.
+so two charts on BTCUSDT 5m and 10m share a single exchange 5m candle stream.
 """
 
 from __future__ import annotations

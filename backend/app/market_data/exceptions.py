@@ -1,4 +1,4 @@
-"""Structured market-data errors. Routes translate these into HTTP responses."""
+"""Exchange-agnostic market-data errors. Routes translate these into HTTP responses."""
 
 from __future__ import annotations
 
@@ -7,25 +7,25 @@ class MarketDataError(Exception):
     """Base class for provider errors."""
 
 
-class BingXUnavailable(MarketDataError):  # noqa: N818  (domain name, not "...Error")
+class ProviderUnavailable(MarketDataError):  # noqa: N818  (domain name, not "...Error")
     """Network failure, timeout or 5xx after retries."""
 
 
-class BingXRateLimited(MarketDataError):  # noqa: N818
+class ProviderRateLimited(MarketDataError):  # noqa: N818
     def __init__(self, retry_after: float) -> None:
         super().__init__(f"rate limited; retry after {retry_after:.1f}s")
         self.retry_after = retry_after
 
 
-class BingXInvalidResponse(MarketDataError):  # noqa: N818
+class InvalidProviderResponse(MarketDataError):  # noqa: N818
     """Response body did not match the expected schema."""
 
 
-class BingXApiError(MarketDataError):
-    """BingX returned a non-zero business code."""
+class ProviderApiError(MarketDataError):
+    """The exchange returned an error code."""
 
     def __init__(self, code: int, message: str) -> None:
-        super().__init__(f"BingX error {code}: {message}")
+        super().__init__(f"provider error {code}: {message}")
         self.code = code
         self.message = message
 

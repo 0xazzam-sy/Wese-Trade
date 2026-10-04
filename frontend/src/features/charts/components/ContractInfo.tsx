@@ -71,6 +71,14 @@ export function ContractInfo({ symbol }: { symbol: string }) {
             <div className="divide-line divide-y">
               <Row label="حجم التيك" value={d.symbol.tick_size} />
               <Row
+                label="قيمة العقد"
+                value={
+                  d.symbol.contract_value
+                    ? `${d.symbol.contract_value} ${d.symbol.contract_value_currency ?? ''}`
+                    : '--'
+                }
+              />
+              <Row
                 label="أقصى رافعة"
                 value={d.symbol.max_leverage ? `${d.symbol.max_leverage}x` : '--'}
               />
@@ -85,11 +93,27 @@ export function ContractInfo({ symbol }: { symbol: string }) {
                     : '--'
                 }
               />
-              <Row label="العقود المفتوحة" value={compactNumber(d.open_interest?.value)} />
+              <Row
+                label="العقود المفتوحة"
+                value={
+                  d.open_interest?.base
+                    ? `${compactNumber(d.open_interest.base)} ${d.symbol.base_asset}`
+                    : '--'
+                }
+              />
+              <Row
+                label="العقود المفتوحة (USD)"
+                value={d.open_interest?.usd ? `$${compactNumber(d.open_interest.usd)}` : '--'}
+              />
               <Row label="أفضل عرض شراء" value={formatPrice(d.book?.bid, precision)} />
               <Row label="أفضل عرض بيع" value={formatPrice(d.book?.ask, precision)} />
               <Row label="الفارق" value={formatPrice(d.book?.spread, precision)} />
-              <Row label="حجم التداول 24س" value={compactNumber(d.ticker?.quote_volume_24h)} />
+              <Row
+                label="حجم التداول 24س"
+                value={
+                  d.ticker ? `${compactNumber(d.ticker.volume_24h)} ${d.symbol.base_asset}` : '--'
+                }
+              />
             </div>
           )}
           <p className="text-fg-subtle text-2xs mt-2">

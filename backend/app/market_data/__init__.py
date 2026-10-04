@@ -1,5 +1,5 @@
-"""Market data domain: normalized, exchange-agnostic types and provider contracts.
+"""Market data domain: normalized, exchange-agnostic types, provider contract and services.
 
-Exchange-specific code (BingX) will live in `app.market_data.providers.bingx` and must
-only be reached through the `MarketDataProvider` protocol — never from FastAPI routes.
+The active provider is OKX public market data (`app.market_data.okx`). Exchange-specific code
+is only reachable through the `MarketDataProvider` protocol, never from FastAPI routes.
 """

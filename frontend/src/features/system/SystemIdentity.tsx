@@ -57,7 +57,7 @@ export function SystemIdentity() {
         <LogoMark className="size-10" />
         <div className="flex flex-col">
           <Wordmark className="text-lg" />
-          <span className="text-fg-subtle text-xs">منصة تحليل العقود الآجلة</span>
+          <span className="text-fg-subtle text-xs">منصة تحليل أسواق الكريبتو</span>
         </div>
         {health.data && (
           <span className="ns-num text-fg-subtle text-2xs ms-auto self-start">
@@ -69,7 +69,7 @@ export function SystemIdentity() {
         <Row label="الخادم" value={api[0]} tone={api[1]} />
         <Row label="قاعدة البيانات" value={db[0]} tone={db[1]} />
         <Row label="الاتصال اللحظي" value={ws[0]} tone={ws[1]} />
-        <Row label="بيانات BingX" value={market.text} tone={market.tone} />
+        <Row label="بيانات السوق (OKX)" value={market.text} tone={market.tone} />
       </ul>
       <p className="text-fg-subtle text-2xs relative mt-2 leading-5">
         منصة تحليل فقط — لا يتم تنفيذ أي صفقات.

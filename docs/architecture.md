@@ -1,6 +1,6 @@
-# NeuralShot — Architecture
+# Wese Trade — Architecture
 
-NeuralShot is a **local-first, analysis-only** crypto futures platform. It never places
+Wese Trade is a **local-first, analysis-only** crypto market platform. It never places
 orders, never stores exchange trading keys, and never uses an LLM to make trading decisions.
 
 This document describes the Phase 1 foundation and the domain contracts that later phases
@@ -40,7 +40,7 @@ and forwards `/api` to Uvicorn: the same topology, so no code changes are requir
 | `market_data/` | Normalized types + `MarketDataProvider` protocol  | —                             |
 | `websocket/`   | Envelope, connection manager, `/ws` route         | `auth`, `core`                |
 
-Exchange-specific code (BingX) will live behind `MarketDataProvider` and is **never** called
+Exchange-specific code (OKX) lives behind `MarketDataProvider` and is **never** called
 from route handlers directly.
 
 ---
@@ -108,20 +108,24 @@ nothing arrives for 45s.
 
 - **Prices are `Decimal`** in the backend and **decimal strings** on the wire. They are converted
   to JS numbers only at the chart-rendering boundary.
-- **Tick size and precision come from exchange metadata** (`MarketSymbol`), never hardcoded.
+- **Tick size, lot size and minimum size come from exchange filters** (OKX `tickSz`,
+  `lotSz`, `minSz`), never derived from a precision and never hardcoded.
+- **Market data source:** Wese Trade analyzes OKX data. Prices on other exchanges (where a
+  user may trade manually) can differ slightly; future signals are based on OKX data.
 - **All timestamps are UTC** internally and in storage. Candles are keyed by their UTC
   open time. The UI converts to the browser timezone for display only.
 - Supported timeframes: `1m, 5m, 10m, 15m, 30m, 1h`.
-  **BingX has no native 10m interval**: 10m candles must be aggregated from 5m candles aligned
+  **OKX has no native 10m bar**: 10m candles are aggregated from 5m candles aligned
   to UTC epoch boundaries (`Timeframe.M10.aggregation_source`).
-- Symbols are displayed as `BTCUSDT`. The provider maps them to exchange-native names
-  (`BTC-USDT`).
-- Public market data needs no API keys. NeuralShot has no order or position endpoints.
+- Symbols are displayed as `BTCUSDT`. The provider maps them to exchange instrument ids
+  (`BTC-USDT-SWAP`) and keeps both.
+- Public market data needs no API keys. Wese Trade has no order or position endpoints.
 
-### Phase 2 implementation (see `docs/bingx-market-data.md` for BingX specifics)
+### Phase 2 implementation (see `docs/okx-market-data.md` for OKX specifics)
 
 ```
-BingX REST + WS ─► bingx/ (rest.py, stream.py, parser.py, provider.py)    exchange-specific
+OKX REST + 2 WS ─► okx/ (rest.py, stream.py, parser.py, provider.py)       exchange-specific
+                   public socket: tickers, mark-price · business socket: candles
                       │  MarketDataProvider protocol (provider.py)
                       ▼
                services/  symbol_service · ticker_service · candle_service
@@ -133,7 +137,7 @@ BingX REST + WS ─► bingx/ (rest.py, stream.py, parser.py, provider.py)    ex
       api/v1/endpoints/markets.py (REST)     websocket/market.py + ConnectionManager (WS)
 ```
 
-- Routes and the WebSocket talk only to `MarketDataEngine`/services, never to BingX.
+- Routes and the WebSocket talk only to `MarketDataEngine`/services, never to OKX.
 - One shared exchange socket. App keys `(symbol, timeframe)` are reference-counted onto
   native exchange streams (10m → 5m), so the future scanner can reuse the same manager.
 - Each browser connection has a bounded outbound queue and its own writer task, so a slow
@@ -147,7 +151,7 @@ BingX REST + WS ─► bingx/ (rest.py, stream.py, parser.py, provider.py)    ex
 ## 5. Future analysis pipeline
 
 ```
-BingX
+OKX public market data
   ↓
 Market Data Provider          (REST history + WS stream; reconnect, rate limits)
   ↓
@@ -229,7 +233,7 @@ Planned tables (not created yet):
 | `backtest_runs`    | Parameters, strategy version, metrics, status                  |
 | `news_cache`       | Fetched + translated headlines (display only)                  |
 
-SQLite is used locally (`backend/data/neuralshot.db`). PostgreSQL only needs
+SQLite is used locally (`backend/data/wese_trade.db`). PostgreSQL only needs
 `DATABASE_URL=postgresql+asyncpg://…` plus the `asyncpg` driver: models use portable types
 (no native enums, explicit constraint naming, timezone-aware datetimes).
 

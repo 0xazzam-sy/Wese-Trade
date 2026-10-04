@@ -25,8 +25,8 @@ class SymbolStatus(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class MarketSymbol:
-    symbol: str  # "BTCUSDT"
-    exchange_symbol: str  # "BTC-USDT"
+    symbol: str  # normalized display form, e.g. "BTCUSDT"
+    exchange_symbol: str  # exchange instrument id, e.g. "BTC-USDT-SWAP"
     base_asset: str
     quote_asset: str
     display_name: str  # "BTC/USDT"
@@ -40,6 +40,9 @@ class MarketSymbol:
     min_notional: Decimal | None
     max_leverage: int | None
     trading_enabled: bool
+    # Contract specification: sizes (step/min quantity) are in CONTRACTS of this value.
+    contract_value: Decimal | None = None
+    contract_value_currency: str | None = None
 
     @property
     def is_active(self) -> bool:
@@ -118,8 +121,12 @@ class FundingInfo:
 
 @dataclass(frozen=True, slots=True)
 class OpenInterest:
+    """Units differ between exchanges, so every unit the exchange provides is kept explicitly."""
+
     symbol: str
-    value: Decimal
+    contracts: Decimal | None  # number of contracts
+    base: Decimal | None  # in the base currency (e.g. BTC)
+    usd: Decimal | None  # notional in USD as reported by the exchange
     timestamp: datetime  # UTC
 
 
@@ -135,3 +142,15 @@ class BookTicker:
     @property
     def spread(self) -> Decimal:
         return self.ask - self.bid
+
+
+@dataclass(frozen=True, slots=True)
+class LiveQuote:
+    """Realtime top-of-book / last / mark update. Any field may be absent in one message."""
+
+    symbol: str
+    timestamp: datetime  # UTC
+    last: Decimal | None = None
+    bid: Decimal | None = None
+    ask: Decimal | None = None
+    mark: Decimal | None = None

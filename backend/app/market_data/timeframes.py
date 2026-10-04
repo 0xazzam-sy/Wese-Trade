@@ -1,6 +1,6 @@
 """Canonical analysis timeframes, owned by the backend.
 
-BingX perpetual futures have no native 10-minute kline. `10m` is synthetic: it is
+The exchange (OKX) has no native 10-minute candle. `10m` is synthetic: it is
 aggregated from 5m candles bucketed on UTC epoch boundaries (see services/aggregation.py).
 The frontend never needs to know which timeframes are native.
 """

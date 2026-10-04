@@ -8,9 +8,9 @@ describe('feedIndicator', () => {
   it('reports app disconnection first', () => {
     expect(feedIndicator('disconnected', 'connected', 'live', ready).text).toBe('غير متصل بالخادم');
   });
-  it('reports BingX reconnecting', () => {
+  it('reports market-data provider reconnecting', () => {
     expect(feedIndicator('connected', 'reconnecting', 'live', ready).text).toBe(
-      'جاري إعادة الاتصال بـ BingX...',
+      'جاري إعادة الاتصال بمزود البيانات...',
     );
   });
   it('reports stale data and never claims live', () => {

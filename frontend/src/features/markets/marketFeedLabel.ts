@@ -2,7 +2,7 @@ import type { StatusTone } from '@/components/ui/StatusDot';
 import type { MarketFeedState } from '@/types/market';
 import type { ConnectionState } from '@/types/realtime';
 
-/** "بيانات BingX" status, distinct from the app-backend connection. */
+/** "بيانات السوق" (market-data feed) status, distinct from the app-backend connection. */
 export function marketFeedLabel(
   app: ConnectionState,
   feed: MarketFeedState | null,

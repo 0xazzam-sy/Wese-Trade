@@ -8,8 +8,8 @@ Server -> client: `market.subscribed` ack, or `system.error` with a code.
 
 from __future__ import annotations
 
-from app.market_data.bingx.exceptions import MarketDataError, SymbolUnavailable, UnknownSymbol
 from app.market_data.engine import MarketDataEngine
+from app.market_data.exceptions import MarketDataError, SymbolUnavailable, UnknownSymbol
 from app.market_data.timeframes import Timeframe
 from app.websocket.events import ClientMessage, EventEnvelope, EventType
 from app.websocket.manager import ClientConnection

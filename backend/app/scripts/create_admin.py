@@ -28,7 +28,7 @@ from app.services.user_service import UserServiceError, count_users, create_user
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Create a NeuralShot administrator account.")
+    parser = argparse.ArgumentParser(description="Create a Wese Trade administrator account.")
     parser.add_argument("--username", help="Admin username (3-64 chars: letters, digits, _ . -)")
     parser.add_argument(
         "--password-stdin",

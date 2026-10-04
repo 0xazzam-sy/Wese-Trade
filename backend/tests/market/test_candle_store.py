@@ -53,3 +53,31 @@ def test_coverage_requires_contiguous_closed_and_current_forming() -> None:
     assert s.has_coverage(5, at(16)) is False  # 11:55 missing
     del s.closed[at(5)]
     assert s.has_coverage(4, at(16)) is False
+
+
+def test_trusted_close_finalizes_immediately_and_inferred_close_can_be_corrected() -> None:
+    s = stream()
+    s.apply_live(candle(0, c="101", closed=False), trust_close=True)
+    closed = s.apply_live(candle(0, c="102", closed=True), trust_close=True)
+    assert [(c.open_ms, c.is_closed) for c in closed.events] == [(at(0), True)]
+    assert s.forming is None
+    # Confirmed by the exchange: a later replay with other values never changes it.
+    assert s.apply_live(candle(0, c="1", closed=True), trust_close=True).events == []
+    assert s.closed[at(0)].close == Decimal("102")
+
+    # Next candle's close arrives late: we infer it from the newer candle first ...
+    s.apply_live(candle(5, c="103", closed=False), trust_close=True)
+    s.apply_live(candle(10, c="104", closed=False), trust_close=True)
+    assert at(5) in s.inferred_closed
+    # ... and the authoritative close may still correct it, exactly once.
+    fixed = s.apply_live(candle(5, c="103.5", closed=True), trust_close=True)
+    assert [c.close for c in fixed.events] == [Decimal("103.5")]
+    assert at(5) not in s.inferred_closed
+    assert s.apply_live(candle(5, c="7", closed=True), trust_close=True).events == []
+
+
+def test_closed_push_after_missed_candles_is_a_gap() -> None:
+    s = stream()
+    s.apply_live(candle(0, closed=True), trust_close=True)
+    result = s.apply_live(candle(15, closed=True), trust_close=True)
+    assert result.gap is True

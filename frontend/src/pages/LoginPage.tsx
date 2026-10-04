@@ -36,7 +36,7 @@ export function LoginPage() {
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
           <LogoMark className="size-14" />
           <Wordmark className="text-2xl" />
-          <p className="text-fg-muted text-sm">منصة تحليل أسواق العقود الآجلة للعملات الرقمية</p>
+          <p className="text-fg-muted text-sm">منصة تحليل أسواق الكريبتو</p>
         </div>
         <h1 className="mb-5 text-lg font-semibold">تسجيل الدخول</h1>
         <LoginForm

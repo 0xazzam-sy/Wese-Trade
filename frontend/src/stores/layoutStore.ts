@@ -29,7 +29,7 @@ export const useLayoutStore = create<LayoutState>()(
       },
     }),
     {
-      name: 'neuralshot.layout',
+      name: 'wesetrade.layout',
       storage: createJSONStorage(() => localStorage),
       partialize: (s) => ({ chartLayout: s.chartLayout }),
       version: 1,

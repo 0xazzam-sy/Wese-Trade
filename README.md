@@ -1,12 +1,19 @@
-# NeuralShot
+# Wese Trade
 
-A local-first, Arabic-first (RTL) platform for analysing BingX perpetual crypto futures
-markets.
+A local-first, Arabic-first (RTL) platform for analysing crypto perpetual swap markets,
+using **OKX public market data**.
 
-> **Analysis only.** NeuralShot never places orders, has no trading endpoints, and needs no
-> exchange API keys.
+> **Analysis only.** Wese Trade never places orders and has no trading, account or
+> position endpoints. Market data comes from OKX's **public** API: no API key, secret,
+> passphrase, OKX login or account connection is needed.
 
-**Current status: Phase 2 (BingX market data).**
+> **Data source.** Wese Trade analyzes OKX USDT perpetual swap market data. You may
+> execute trades manually on another exchange (for example BingX). Prices can differ
+> slightly between exchanges (independent order books, liquidity and microstructure).
+> Any future signals will be based on OKX data, not on another exchange's execution price.
+> No automatic cross-exchange correction is attempted.
+
+**Current status: Phase 2 complete (OKX market data, validated against the real exchange).**
 
 Phase 1 (foundation) provides:
 - authentication and roles
@@ -15,20 +22,20 @@ Phase 1 (foundation) provides:
 - the RTL workstation UI
 - dark and light themes
 
-Phase 2 adds real, read-only BingX perpetual futures data:
-- the live symbol list
+Phase 2 adds real, read-only market data:
+- the live list of all active OKX USDT perpetual swaps
 - historical and realtime candles on both charts for 1m, 5m, 10m (built from 5m), 15m,
   30m and 1h
-- live prices and 24h change
-- funding, open interest and best bid/ask
+- live prices and 24h statistics
+- best bid/ask, mark price, funding and open interest
 - a market overview list
-- feed health, stale detection and gap recovery
+- feed health, stale detection, reconnect and gap recovery
 
 Signals, the scanner, news and backtesting are **not implemented yet**. Their panels show
 explicit placeholders ("--"), and no fake data is shown anywhere.
 
-BingX details, assumptions and validation status are in
-[`docs/bingx-market-data.md`](docs/bingx-market-data.md).
+OKX endpoints, behaviour and the real-exchange validation results are in
+[`docs/okx-market-data.md`](docs/okx-market-data.md).
 
 ---
 
@@ -49,8 +56,8 @@ All commands start from the project root (the folder containing this README).
 ### 1. Clone / open the project
 
 ```bash
-git clone <repository-url> neuralshot
-cd neuralshot
+git clone <repository-url> wese-trade
+cd wese-trade
 ```
 
 ### 2. Create the backend virtual environment
@@ -100,7 +107,7 @@ The placeholder key works for local development (a warning is logged). It is
 alembic upgrade head
 ```
 
-This creates the SQLite database at `backend/data/neuralshot.db`.
+This creates the SQLite database at `backend/data/wese_trade.db`.
 
 ### 6. Create the initial admin account
 
@@ -181,7 +188,7 @@ browser uses one origin and the secure httpOnly session cookie just works.
 | New migration           | `alembic revision --autogenerate -m "describe"`    |
 | Create admin            | `python -m app.scripts.create_admin`               |
 | Tests                   | `pytest`                                           |
-| Live BingX tests (internet) | `pytest -m live`                               |
+| Live OKX tests (internet) | `pytest -m live`                                 |
 | Lint                    | `ruff check .`                                     |
 | Format                  | `ruff format .`                                    |
 | Type-check (strict)     | `mypy app tests alembic`                           |
@@ -211,7 +218,7 @@ build.
 ## Project structure
 
 ```
-neuralshot/
+wese-trade/
 ├── backend/                 FastAPI service (Python 3.12)
 │   ├── app/
 │   │   ├── main.py          App factory + lifespan
@@ -223,7 +230,7 @@ neuralshot/
 │   │   ├── schemas/         Pydantic request/response models
 │   │   ├── services/        Domain logic (users, health)
 │   │   ├── websocket/       Event envelope, per-client queues, /ws + market protocol
-│   │   ├── market_data/     Models, provider protocol, bingx/ adapter, services/, engine
+│   │   ├── market_data/     Models, provider protocol, okx/ adapter, services/, engine
 │   │   ├── signal_engine/   Contracts only (labels, states, Strategy protocol)
 │   │   ├── backtesting/     Contracts only
 │   │   ├── scanner/         Contracts only
@@ -246,7 +253,8 @@ neuralshot/
 │       ├── lib/             env, http, formatting helpers
 │       └── styles/          Design tokens (dark/light) + global CSS
 ├── docs/architecture.md     Architecture + future domain contracts
-├── docs/bingx-market-data.md  BingX API usage, assumptions, validation status
+├── docs/okx-market-data.md    OKX API usage, behaviour, real validation results
+├── docs/bingx-market-data.md  Historical: the former BingX provider (removed)
 └── scripts/                 dev.sh (run both), check.sh (all quality gates)
 ```
 
@@ -261,7 +269,7 @@ For design decisions and the future analysis pipeline, see
 
 | Variable                      | Required | Notes                                        |
 | ----------------------------- | -------- | -------------------------------------------- |
-| `APP_NAME`                    | no       | Default `NeuralShot`                         |
+| `APP_NAME`                    | no       | Default `Wese Trade`                         |
 | `APP_ENV`                     | no       | `development` / `test` / `production`        |
 | `APP_HOST`, `APP_PORT`        | no       | Default `127.0.0.1:8000`                     |
 | `DATABASE_URL`                | no       | Default SQLite in `backend/data/`            |
@@ -269,8 +277,10 @@ For design decisions and the future analysis pipeline, see
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | no       | Default 720 (12 h)                           |
 | `FRONTEND_ORIGIN`             | no       | Comma-separated; used for CORS + WS origin   |
 | `LOG_LEVEL`                   | no       | Default `INFO`                               |
-| `MARKET_DATA_ENABLED`         | no       | Default `true`; `false` disables BingX entirely |
-| `BINGX_BASE_URL`, `BINGX_WS_URL` | no    | Public BingX endpoints (no API keys needed) |
+| `MARKET_DATA_ENABLED`         | no       | Default `true`; `false` disables market data entirely |
+| `OKX_REST_URL`                | no       | Default `https://openapi.okx.com`           |
+| `OKX_PUBLIC_WS_URL`           | no       | Default `wss://ws.okx.com/ws/v5/public` (port 443) |
+| `OKX_BUSINESS_WS_URL`         | no       | Default `wss://ws.okx.com/ws/v5/business` (candles) |
 | `MARKET_STALE_AFTER_SECONDS`  | no       | Default 60; silence after which a stream is shown as stale |
 | `NEWS_PROVIDER`, `NEWS_API_KEY` | no     | Reserved for later phases |
 
@@ -286,11 +296,13 @@ For design decisions and the future analysis pipeline, see
 
 ## Troubleshooting
 
-- **Charts say "جاري إعادة الاتصال بـ BingX..." / health shows `rest_reachable: false`**:
-  the machine cannot reach `open-api.bingx.com` or `open-api-swap.bingx.com`. Check your
-  internet, firewall or proxy. The app keeps running and recovers by itself once BingX is
-  reachable.
-
+- **Charts say "جاري إعادة الاتصال بمزود البيانات..." / health shows `rest_reachable: false`**:
+  the machine cannot reach `openapi.okx.com` or `ws.okx.com` (port 443). Check your
+  internet, firewall or proxy, and that OKX is available in your location. The app keeps
+  running and recovers by itself once OKX is reachable.
+- **Upgrading from NeuralShot**: the default database file is now `backend/data/wese_trade.db`.
+  To keep existing users, rename `backend/data/neuralshot.db` to `wese_trade.db` (or set
+  `DATABASE_URL`). Everyone must sign in again once after the rename.
 - **Login says the server is unreachable**: make sure the backend (step 7) is running on
   port 8000.
 - **`create_admin` says the database is not initialised**: run `alembic upgrade head` first.

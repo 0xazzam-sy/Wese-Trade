@@ -33,7 +33,7 @@ export const useChartStore = create<ChartState>()(
       },
     }),
     {
-      name: 'neuralshot.charts',
+      name: 'wesetrade.charts',
       storage: createJSONStorage(() => localStorage),
       version: 1,
     },

@@ -66,7 +66,7 @@ export function ChartWorkspace() {
 }
 
 /**
- * Once the real symbol list loads, replace any selection that BingX does not list as active
+ * Once the real symbol list loads, replace any selection that the exchange does not list as active
  * (e.g. a persisted symbol that no longer exists) with the backend default (BTCUSDT if
  * available, else the first active symbol). Never hardcodes the list itself.
  */

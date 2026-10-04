@@ -8,7 +8,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import replace
 
 from app.core.logging import get_logger
-from app.market_data.bingx.exceptions import MarketDataError, SymbolUnavailable, UnknownSymbol
+from app.market_data.exceptions import MarketDataError, SymbolUnavailable, UnknownSymbol
 from app.market_data.models import MarketSymbol, SymbolStatus
 from app.market_data.provider import MarketDataProvider
 from app.market_data.services.health import MarketHealth
@@ -21,6 +21,11 @@ REFRESH_INTERVAL_SECONDS = 20 * 60
 RETRY_INTERVAL_SECONDS = 30.0
 
 ChangeCallback = Callable[[set[str]], Awaitable[None]]
+
+
+def _normalize_lookup(text: str) -> str:
+    """'btc-usdt-swap', 'BTC-USDT', 'btc/usdt' -> 'BTCUSDT' (exchange suffixes are internal)."""
+    return text.strip().upper().removesuffix("-SWAP").replace("-", "").replace("/", "")
 
 
 class SymbolService:
@@ -102,7 +107,7 @@ class SymbolService:
 
     # --- queries ------------------------------------------------------------
     def get(self, symbol: str) -> MarketSymbol:
-        key = symbol.strip().upper().replace("-", "").replace("/", "")
+        key = _normalize_lookup(symbol)
         found = self._symbols.get(key)
         if found is None:
             raise UnknownSymbol(symbol)
@@ -117,7 +122,7 @@ class SymbolService:
     def list(self, *, search: str | None = None, active_only: bool = True) -> list[MarketSymbol]:
         items = [s for s in self._symbols.values() if s.is_active or not active_only]
         if search:
-            needle = search.strip().upper().replace("-", "").replace("/", "")
+            needle = _normalize_lookup(search)
             items = [s for s in items if needle in s.symbol or needle in s.base_asset]
             # Exact/prefix matches first ("BTC" -> BTCUSDT before ...BTC...).
             items.sort(key=lambda s: (not s.base_asset.startswith(needle), len(s.symbol), s.symbol))

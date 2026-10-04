@@ -10,11 +10,11 @@ export function MarketFeedIndicator() {
   return (
     <div
       role="status"
-      title="حالة تغذية بيانات BingX"
+      title="حالة تغذية بيانات السوق (OKX)"
       className="bg-sunken border-line flex h-8 items-center gap-2 rounded-full border px-3"
     >
       <StatusDot tone={tone} />
-      <span className="text-fg-muted text-xs font-medium">بيانات BingX: {text}</span>
+      <span className="text-fg-muted text-xs font-medium">بيانات السوق: {text}</span>
     </div>
   );
 }

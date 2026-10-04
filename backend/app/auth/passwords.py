@@ -11,7 +11,7 @@ MIN_PASSWORD_LENGTH = 12
 MAX_PASSWORD_LENGTH = 256
 
 # Pre-computed hash used to equalize timing when the username does not exist.
-_DUMMY_HASH = _hasher.hash("neuralshot-timing-equalizer")
+_DUMMY_HASH = _hasher.hash("wese-trade-timing-equalizer")
 
 
 def hash_password(password: str) -> str:

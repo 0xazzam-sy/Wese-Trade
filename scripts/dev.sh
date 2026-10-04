@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start the NeuralShot backend (FastAPI) and frontend (Vite) together for local development.
+# Start the Wese Trade backend (FastAPI) and frontend (Vite) together for local development.
 # Prerequisites: README setup steps 2-8 completed. Ctrl+C stops both.
 set -euo pipefail
 

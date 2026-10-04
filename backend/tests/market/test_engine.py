@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import time
 from collections.abc import AsyncIterator
+from decimal import Decimal
 
 import pytest
 
-from app.market_data.bingx.exceptions import BingXUnavailable, SymbolUnavailable, UnknownSymbol
 from app.market_data.engine import MarketDataEngine
-from app.market_data.models import SymbolStatus
+from app.market_data.exceptions import ProviderUnavailable, SymbolUnavailable, UnknownSymbol
+from app.market_data.models import LiveQuote, SymbolStatus
+from app.market_data.provider import FEED_CANDLES, FEED_QUOTES
 from app.market_data.timeframes import Timeframe
 from tests.market import helpers as h
 from tests.market.fakes import FakeProvider, FakePublisher
@@ -25,11 +27,13 @@ async def setup(
     provider.set_stream_handlers(
         on_candle=engine._on_candle,
         on_state=engine._on_state,
+        on_quote=engine._on_quote,
         on_reconnected=engine._on_reconnected,
     )
     engine.symbols.on_unavailable = engine._on_symbols_unavailable  # normally wired by start()
     await engine.symbols.refresh()
-    await provider.set_state("connected")
+    await provider.set_state("connected", FEED_CANDLES)
+    await provider.set_state("connected", FEED_QUOTES)
     yield engine, provider, publisher
     await engine.stop()
 
@@ -94,8 +98,13 @@ async def test_live_candles_ticks_and_10m_fanout(
     assert ten[0]["candle"]["open"] == "100"
     assert publisher.of_type("market.candle", "eth") == []  # other symbol untouched
 
+    # With the quotes feed up, prices come from the tickers channel, not candles.
+    assert publisher.of_type("market.tick") == []
+    await provider.push_quote(
+        LiveQuote(symbol="BTCUSDT", timestamp=h.BASE, last=Decimal("102.5"), bid=Decimal("102.4"))
+    )
     ticks = publisher.of_type("market.tick", "five")
-    assert ticks[0]["price"] == "102"
+    assert ticks[0]["price"] == "102.5"
     assert publisher.of_type("market.tick", "ten") == ticks  # same symbol
     assert publisher.of_type("market.tick", "eth") == []
 
@@ -141,9 +150,7 @@ async def test_reconnect_triggers_gap_recovery_and_resync(
     ] + [h.candle(6, tf=Timeframe.M1, c="206", closed=False)]
     publisher.clear()
     await provider.set_state("connected")
-    provider.stats.reconnect_count = 1
-    assert provider.on_reconnected is not None
-    await provider.on_reconnected()
+    await provider.reconnected(FEED_CANDLES)
 
     stream = engine.candles.stream("BTCUSDT", Timeframe.M1)
     assert sorted(stream.closed) == [h.at(3), h.at(4), h.at(5)]
@@ -196,7 +203,7 @@ async def test_rest_outage_raises_structured_error_without_crashing(
 ) -> None:
     engine, provider, _ = setup
     provider.fail_rest = True
-    with pytest.raises(BingXUnavailable):
+    with pytest.raises(ProviderUnavailable):
         await engine.candles.history(engine.symbols.get("BTCUSDT"), Timeframe.M1, limit=10)
     # Subscriptions/streaming still work during a REST outage.
     await engine.subscribe("c1", "BTCUSDT", Timeframe.M1)
@@ -253,3 +260,69 @@ async def test_status_broadcast_follows_rest_reachability(
     count = len(publisher.broadcasts)
     engine.health.record_rest(True, None)  # no change -> no extra broadcast
     assert len(publisher.broadcasts) == count
+
+
+async def test_quotes_subscribed_once_per_symbol_and_released(
+    setup: tuple[MarketDataEngine, FakeProvider, FakePublisher],
+) -> None:
+    engine, provider, _ = setup
+    await engine.subscribe("a", "BTCUSDT", Timeframe.M1)
+    await engine.subscribe("b", "BTCUSDT", Timeframe.M10)
+    await engine.subscribe("b", "ETHUSDT", Timeframe.M5)
+    assert provider.quotes == ["BTCUSDT", "ETHUSDT"]
+    await engine.release_all("a")
+    assert provider.quotes == ["BTCUSDT", "ETHUSDT"]  # BTC still charted by b
+    await engine.release_all("b")
+    assert provider.quotes == []
+
+
+async def test_confirm_flag_closes_once_and_never_reopens(
+    setup: tuple[MarketDataEngine, FakeProvider, FakePublisher],
+) -> None:
+    engine, provider, publisher = setup
+    await engine.subscribe("c1", "BTCUSDT", Timeframe.M1)
+    publisher.clear()
+    await provider.push(h.candle(3, tf=Timeframe.M1, c="101", closed=False))
+    await provider.push(h.candle(3, tf=Timeframe.M1, c="102", closed=True))  # confirm=1
+    await provider.push(h.candle(3, tf=Timeframe.M1, c="102", closed=True))  # duplicate
+    await provider.push(
+        h.candle(3, tf=Timeframe.M1, c="999", closed=False)
+    )  # late forming: ignored
+    events = publisher.of_type("market.candle", "c1")
+    assert [(e["candle"]["close"], e["candle"]["is_closed"]) for e in events] == [
+        ("101", False),
+        ("102", True),
+    ]
+    stream = engine.candles.stream("BTCUSDT", Timeframe.M1)
+    assert stream.closed[h.at(3)].close == Decimal("102")
+    assert stream.forming is None
+
+
+async def test_ticks_fall_back_to_candles_when_quotes_feed_down(
+    setup: tuple[MarketDataEngine, FakeProvider, FakePublisher],
+) -> None:
+    engine, provider, publisher = setup
+    await engine.subscribe("c1", "BTCUSDT", Timeframe.M1)
+    await provider.set_state("reconnecting", FEED_QUOTES)
+    assert engine.health.overall == "degraded"  # candles still live: not "disconnected"
+    assert engine.stream_state(("BTCUSDT", Timeframe.M1)) == "live"
+    await provider.push(h.candle(4, tf=Timeframe.M1, c="150", closed=False))
+    assert publisher.of_type("market.tick", "c1")[-1]["price"] == "150"
+    await provider.set_state("connected", FEED_QUOTES)
+    assert engine.health.overall == "connected"
+
+
+async def test_quiet_market_is_not_flagged_stale(
+    setup: tuple[MarketDataEngine, FakeProvider, FakePublisher],
+) -> None:
+    engine, provider, _ = setup
+    await engine.subscribe("c1", "ETHUSDT", Timeframe.M1)
+    stream = engine.candles.stream("ETHUSDT", Timeframe.M1)
+    # Silent a bit longer than stale_after, with no quotes either: a quiet instrument.
+    stream.last_update = time.monotonic() - 0.08
+    engine.check_streams()
+    assert engine.health.stale_streams == []
+    # Quotes keep arriving while candles are silent: the candle feed is genuinely stale.
+    await provider.push_quote(LiveQuote(symbol="ETHUSDT", timestamp=h.BASE, last=Decimal("1")))
+    engine.check_streams()
+    assert engine.health.stale_streams == ["ETHUSDT:1m"]

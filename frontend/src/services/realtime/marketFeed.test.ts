@@ -77,7 +77,7 @@ describe('MarketFeed', () => {
     ws.emit('market.resync', { symbol: 'BTCUSDT', timeframe: '10m', reason: 'reconnect' });
     ws.emit('system.error', { code: 'symbol_unavailable', symbol: 'btcusdt', timeframe: '10m' });
     ws.emit('market.tick', { symbol: 'BTCUSDT', price: '65000.5', timestamp: 't' });
-    ws.emit('market.status', { provider: 'bingx', state: 'reconnecting' });
+    ws.emit('market.status', { provider: 'okx', state: 'reconnecting' });
 
     expect(handlers.onStream).toHaveBeenCalledWith('stale');
     expect(handlers.onResync).toHaveBeenCalledOnce();

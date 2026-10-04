@@ -12,7 +12,7 @@ async def test_health_reports_ok(client: httpx.AsyncClient) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "ok"
-    assert body["service"] == "NeuralShot"
+    assert body["service"] == "Wese Trade"
     assert body["api_version"] == "v1"
     assert body["database"] == {"status": "ok"}
     assert body["timestamp"].endswith("Z")

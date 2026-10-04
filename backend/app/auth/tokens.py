@@ -10,7 +10,7 @@ import jwt
 from app.utils.time import utc_now
 
 ALGORITHM = "HS256"
-TOKEN_AUDIENCE = "neuralshot-web"  # noqa: S105  (audience claim, not a secret)
+TOKEN_AUDIENCE = "wese-trade-web"  # noqa: S105  (audience claim, not a secret)
 ACCESS_COOKIE_NAME = "ns_access"
 
 

@@ -25,7 +25,7 @@ export function feedIndicator(
     feed === 'disconnected' ||
     stream === 'reconnecting'
   ) {
-    return { tone: 'pending', text: 'جاري إعادة الاتصال بـ BingX...' };
+    return { tone: 'pending', text: 'جاري إعادة الاتصال بمزود البيانات...' };
   }
   if (load.status === 'loading') return { tone: 'pending', text: 'جاري التحميل' };
   if (load.status === 'error') return { tone: 'error', text: 'تعذر تحميل الشموع' };
