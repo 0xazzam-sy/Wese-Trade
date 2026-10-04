@@ -24,7 +24,8 @@ export class ChartController {
 
   constructor(
     private readonly series: CandleSeries,
-    private readonly fit: () => void = () => undefined,
+    /** Called after history loads with the number of bars (sets the initial view). */
+    private readonly fit: (count: number) => void = () => undefined,
   ) {}
 
   get hasHistory(): boolean {
@@ -47,7 +48,7 @@ export class ChartController {
     this.series.setData(data);
     this.times = new Set(normalized.map((b) => b.time));
     this.lastTime = normalized.length ? (normalized[normalized.length - 1]?.time ?? null) : null;
-    this.fit();
+    this.fit(normalized.length);
     return normalized.length;
   }
 

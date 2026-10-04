@@ -55,8 +55,11 @@ asyncio_default_fixture_loop_scope = "function"
 asyncio_default_test_loop_scope = "function"
 testpaths = ["tests"]
 # Live OKX tests hit the real public API; run explicitly with `pytest -m live`.
-addopts = "-m 'not live'"
-markers = ["live: calls the real OKX public API (network required, no API keys)"]
+addopts = "-m 'not live and not live_analysis'"
+markers = [
+    "live: calls the real OKX public API (network required, no API keys)",
+    "live_analysis: runs the analysis engine on real OKX candles (network required)",
+]
 filterwarnings = [
   "error::DeprecationWarning:app.*",
   # Starlette's TestClient (used only for WebSocket tests) nudges towards httpx2.

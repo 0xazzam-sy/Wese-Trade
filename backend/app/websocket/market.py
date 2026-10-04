@@ -8,6 +8,8 @@ Server -> client: `market.subscribed` ack, or `system.error` with a code.
 
 from __future__ import annotations
 
+from app.analysis.service import AnalysisService
+from app.core.logging import get_logger
 from app.market_data.engine import MarketDataEngine
 from app.market_data.exceptions import MarketDataError, SymbolUnavailable, UnknownSymbol
 from app.market_data.timeframes import Timeframe
@@ -15,6 +17,7 @@ from app.websocket.events import ClientMessage, EventEnvelope, EventType
 from app.websocket.manager import ClientConnection
 
 MAX_SUBSCRIPTIONS_PER_CONNECTION = 8
+logger = get_logger(__name__)
 
 
 async def _error(connection: ClientConnection, code: str, data: dict[str, object]) -> None:
@@ -22,8 +25,12 @@ async def _error(connection: ClientConnection, code: str, data: dict[str, object
 
 
 async def handle_market_message(
-    connection: ClientConnection, market: MarketDataEngine | None, message: ClientMessage
+    connection: ClientConnection,
+    market: MarketDataEngine | None,
+    message: ClientMessage,
+    analysis: AnalysisService | None = None,
 ) -> None:
+    """A market subscription also subscribes the stream's analysis (`analysis.update`)."""
     symbol = message.data.get("symbol")
     timeframe_raw = message.data.get("timeframe")
     context: dict[str, object] = {"symbol": symbol, "timeframe": timeframe_raw}
@@ -40,6 +47,8 @@ async def handle_market_message(
         return
 
     if message.type == EventType.MARKET_UNSUBSCRIBE:
+        if analysis is not None:
+            await analysis.unsubscribe(connection.id, symbol, timeframe)
         await market.unsubscribe(connection.id, symbol, timeframe)
         return
 
@@ -65,3 +74,8 @@ async def handle_market_message(
             EventType.MARKET_SUBSCRIBED, {"symbol": resolved.symbol, "timeframe": timeframe.value}
         )
     )
+    if analysis is not None:
+        try:
+            await analysis.subscribe(connection.id, resolved.symbol, timeframe)
+        except Exception:  # analysis must never break the market subscription
+            logger.exception("analysis.subscribe_failed")

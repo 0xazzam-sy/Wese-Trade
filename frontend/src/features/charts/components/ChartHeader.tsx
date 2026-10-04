@@ -1,6 +1,7 @@
 import { Maximize2, Minimize2, RefreshCw } from 'lucide-react';
 
 import { IconButton } from '@/components/ui/IconButton';
+import { OverlayMenu } from '@/features/analysis/components/OverlayMenu';
 import type { MarketSymbol, SymbolCode, Timeframe } from '@/types/market';
 
 import { ContractInfo } from './ContractInfo';
@@ -38,6 +39,7 @@ export function ChartHeader(props: ChartHeaderProps) {
 
       <div className="ms-auto flex items-center gap-1">
         <StreamBadge indicator={props.indicator} />
+        <OverlayMenu />
         <ContractInfo symbol={props.symbol} />
         <IconButton
           size="sm"

@@ -6,6 +6,7 @@ import { ApiError } from '@/lib/http';
 import { marketsApi } from '@/services/api/markets';
 import { marketFeed } from '@/services/realtime/marketFeed';
 import { bar, FakeRealtime } from '@/test/fakeRealtime';
+import { readySnapshot } from '@/test/analysisFixture';
 import type { CandleList, Timeframe } from '@/types/market';
 
 import { useMarketChart } from './useMarketChart';
@@ -189,6 +190,44 @@ describe('useMarketChart', () => {
     });
     await waitFor(() => {
       expect(spy).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('routes analysis to its own stream and resets it on symbol or timeframe switch', async () => {
+    vi.spyOn(marketsApi, 'candles').mockImplementation((symbol, timeframe) =>
+      Promise.resolve(history(symbol, timeframe, [300])),
+    );
+    const { ref } = makeChart();
+    const { result, rerender } = renderHook(
+      ({ symbol, tf }: { symbol: string; tf: Timeframe }) =>
+        useMarketChart(ref, symbol, tf, undefined),
+      { initialProps: { symbol: 'BTCUSDT', tf: '5m' as Timeframe } },
+    );
+    act(() => {
+      ws.emit('analysis.update', { ...readySnapshot() });
+    });
+    expect(result.current.analysis?.symbol).toBe('BTCUSDT');
+    // Another stream's analysis never reaches this chart.
+    act(() => {
+      ws.emit('analysis.update', { ...readySnapshot({ symbol: 'ETHUSDT' }) });
+    });
+    expect(result.current.analysis?.symbol).toBe('BTCUSDT');
+
+    rerender({ symbol: 'ETHUSDT', tf: '5m' });
+    expect(result.current.analysis).toBeNull(); // reset immediately on symbol switch
+    act(() => {
+      ws.emit('analysis.update', { ...readySnapshot() }); // late BTC analysis: ignored
+    });
+    expect(result.current.analysis).toBeNull();
+    act(() => {
+      ws.emit('analysis.update', { ...readySnapshot({ symbol: 'ETHUSDT' }) });
+    });
+    expect(result.current.analysis?.symbol).toBe('ETHUSDT');
+
+    rerender({ symbol: 'ETHUSDT', tf: '15m' });
+    expect(result.current.analysis).toBeNull(); // reset on timeframe switch
+    await waitFor(() => {
+      expect(result.current.load.status).toBe('ready');
     });
   });
 });

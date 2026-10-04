@@ -32,6 +32,9 @@ class EventType(StrEnum):
     MARKET_UNSUBSCRIBE = "market.unsubscribe"  # client -> server
     MARKET_SUBSCRIBED = "market.subscribed"  # ack
 
+    # --- Market intelligence (phase 3) -------------------------------------------
+    ANALYSIS_UPDATE = "analysis.update"  # structured analysis for a subscribed stream
+
     # --- Reserved for later phases (never emitted yet) -------------------------
     SIGNAL_LIVE = "signal.live"
     SIGNAL_CONFIRMED = "signal.confirmed"

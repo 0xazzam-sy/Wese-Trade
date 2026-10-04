@@ -85,4 +85,30 @@ describe('MarketFeed', () => {
     expect(tick).toHaveBeenCalledWith('65000.5', 't');
     expect(status).toHaveBeenCalledWith('reconnecting');
   });
+
+  it('routes analysis by stream and replays it to a chart joining an existing stream', () => {
+    const { feed, ws } = setup();
+    const first = vi.fn();
+    const second = vi.fn();
+    const other = vi.fn();
+    feed.subscribe('BTCUSDT', '5m', { onCandle: vi.fn(), onAnalysis: first });
+    feed.subscribe('ETHUSDT', '5m', { onCandle: vi.fn(), onAnalysis: other });
+    const full = {
+      kind: 'full',
+      symbol: 'BTCUSDT',
+      timeframe: '5m',
+      analysis_ready: true,
+      candle_time: 1,
+    };
+    const live = { ...full, kind: 'live', price: 2 };
+    ws.emit('analysis.update', full);
+    ws.emit('analysis.update', live);
+    expect(first).toHaveBeenCalledTimes(2);
+    expect(other).not.toHaveBeenCalled();
+    // Second chart on the same stream: no new server subscription, cached analysis replayed.
+    const sentBefore = ws.sent.length;
+    feed.subscribe('BTCUSDT', '5m', { onCandle: vi.fn(), onAnalysis: second });
+    expect(ws.sent.length).toBe(sentBefore);
+    expect(second.mock.calls.map((c) => (c[0] as { kind: string }).kind)).toEqual(['full', 'live']);
+  });
 });

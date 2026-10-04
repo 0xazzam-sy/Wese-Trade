@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import time
-from collections.abc import Coroutine, Iterable
+from collections.abc import Callable, Coroutine, Iterable
 from typing import Any, Protocol
 
 from app.core.logging import get_logger
@@ -49,6 +49,10 @@ class Publisher(Protocol):
     def broadcast(self, envelope: EventEnvelope) -> None: ...
 
 
+CandleListener = Callable[[Candle], None]
+ResyncListener = Callable[[AppKey], None]
+
+
 class MarketDataEngine:
     def __init__(
         self,
@@ -76,6 +80,10 @@ class MarketDataEngine:
         self._lock = asyncio.Lock()
         self._last_status: str | None = None
         self.health.on_change = self._broadcast_status_if_changed
+        # In-process observers (the analysis engine): every published candle (native and
+        # aggregated 10m) and every history resync. Listener errors never break the feed.
+        self.candle_listeners: list[CandleListener] = []
+        self.resync_listeners: list[ResyncListener] = []
 
     # --- lifecycle ------------------------------------------------------------
     async def start(self) -> None:
@@ -218,6 +226,7 @@ class MarketDataEngine:
                 self.publisher.send_to(
                     consumers, EventEnvelope.of(EventType.MARKET_CANDLE, candle_event(candle))
                 )
+            self._notify_candle(candle)
             aggregator = self._aggregators.get(candle.symbol)
             if candle.timeframe is Timeframe.M5 and aggregator is not None:
                 derived = aggregator.update(candle, now_ms=now_ms())
@@ -226,6 +235,21 @@ class MarketDataEngine:
                     self.publisher.send_to(
                         ten, EventEnvelope.of(EventType.MARKET_CANDLE, candle_event(item))
                     )
+                    self._notify_candle(item)
+
+    def _notify_candle(self, candle: Candle) -> None:
+        for listener in self.candle_listeners:
+            try:
+                listener(candle)
+            except Exception:
+                logger.exception("market.candle_listener_failed")
+
+    def _notify_resync(self, key: AppKey) -> None:
+        for listener in self.resync_listeners:
+            try:
+                listener(key)
+            except Exception:
+                logger.exception("market.resync_listener_failed")
 
     async def _on_quote(self, quote: LiveQuote) -> None:
         if quote.symbol not in self.subscriptions.symbols:
@@ -302,6 +326,7 @@ class MarketDataEngine:
             payload = {"symbol": key[0], "timeframe": key[1].value, "reason": reason}
             self.publisher.send_to(consumers, EventEnvelope.of(EventType.MARKET_RESYNC, payload))
             self.publisher.send_to(consumers, self._stream_state_event(key))
+            self._notify_resync(key)
 
     async def _on_symbols_unavailable(self, symbols: set[str]) -> None:
         async with self._lock:

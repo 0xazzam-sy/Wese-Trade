@@ -1,13 +1,18 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 
+import { AnalysisOverlay, readOverlayPalette } from '@/features/analysis/overlays/AnalysisOverlay';
+import { buildOverlayModel } from '@/features/analysis/overlays/overlayModel';
 import { useMarketChart } from '@/features/charts/hooks/useMarketChart';
 import type { ChartController } from '@/features/charts/lib/ChartController';
 import { useSymbolMap } from '@/features/markets/queries';
 import { cn } from '@/lib/cn';
+import { useAnalysisStore } from '@/stores/analysisStore';
 import { useChartStore } from '@/stores/chartStore';
 import { useConnectionStore } from '@/stores/connectionStore';
 import { type ChartId, useLayoutStore } from '@/stores/layoutStore';
 import { useMarketStore } from '@/stores/marketStore';
+import { useOverlayStore } from '@/stores/overlayStore';
+import { useThemeStore } from '@/stores/themeStore';
 
 import { CandlestickChart } from './CandlestickChart';
 import { ChartBodyState } from './ChartBodyState';
@@ -37,13 +42,32 @@ export function ChartPanel({ chartId, className }: { chartId: ChartId; className
   const onController = useCallback((controller: ChartController | null) => {
     controllerRef.current = controller;
   }, []);
-  const { load, stream, reload } = useMarketChart(
+  const { load, stream, analysis, reload } = useMarketChart(
     controllerRef,
     selection.symbol,
     selection.timeframe,
     meta,
   );
   const indicator = feedIndicator(appConnection, feed, stream, load);
+
+  // Backend analysis -> chart overlays (drawing only) and the shared analysis panel.
+  const overlay = useMemo(() => new AnalysisOverlay(), []);
+  const overlays = useMemo(() => [overlay], [overlay]);
+  const toggles = useOverlayStore((s) => s.toggles);
+  const theme = useThemeStore((s) => s.theme);
+  const setAnalysis = useAnalysisStore((s) => s.setAnalysis);
+  useEffect(() => {
+    overlay.setModel(buildOverlayModel(analysis, toggles), readOverlayPalette());
+  }, [overlay, analysis, toggles, theme]);
+  useEffect(() => {
+    setAnalysis(chartId, analysis);
+  }, [chartId, analysis, setAnalysis]);
+  useEffect(
+    () => () => {
+      setAnalysis(chartId, null);
+    },
+    [chartId, setAnalysis],
+  );
 
   // Auto-retry while the backend is still loading exchange metadata.
   useEffect(() => {
@@ -61,6 +85,7 @@ export function ChartPanel({ chartId, className }: { chartId: ChartId; className
       data-symbol={selection.symbol}
       data-timeframe={selection.timeframe}
       data-load={load.status}
+      data-analysis={analysis ? (analysis.analysis_ready ? 'ready' : 'not-ready') : 'none'}
       className={cn('ns-panel @container flex min-h-0 min-w-0 flex-col overflow-hidden', className)}
     >
       <ChartHeader
@@ -83,7 +108,7 @@ export function ChartPanel({ chartId, className }: { chartId: ChartId; className
         }}
       />
       <div className="relative min-h-0 flex-1">
-        <CandlestickChart onController={onController} />
+        <CandlestickChart onController={onController} overlays={overlays} />
         <ChartBodyState load={load} symbol={selection.symbol} onRetry={reload} />
       </div>
     </section>

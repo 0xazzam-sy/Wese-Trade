@@ -13,7 +13,7 @@ using **OKX public market data**.
 > Any future signals will be based on OKX data, not on another exchange's execution price.
 > No automatic cross-exchange correction is attempted.
 
-**Current status: Phase 2 complete (OKX market data, validated against the real exchange).**
+**Current status: Phase 3 complete (market intelligence engine on real OKX data).**
 
 Phase 1 (foundation) provides:
 - authentication and roles
@@ -31,8 +31,22 @@ Phase 2 adds real, read-only market data:
 - a market overview list
 - feed health, stale detection, reconnect and gap recovery
 
-Signals, the scanner, news and backtesting are **not implemented yet**. Their panels show
-explicit placeholders ("--"), and no fake data is shown anywhere.
+Phase 3 adds the deterministic **market intelligence engine** (analysis only):
+- trend (EMA 20/50/100/200 features), market regime, volatility (ATR + percentiles), RSI
+  and momentum, volume features
+- swing and internal structure: pivots, HH/HL/LH/LL, BOS, CHoCH, protected highs/lows
+- liquidity: equal highs/lows, liquidity pools, sweeps (vs breakouts)
+- fair value gaps, order blocks, premium/discount/equilibrium, OTE zone
+- multi-timeframe context (e.g. 5m read against 15m and 1h)
+- strict no-repaint / no-lookahead guarantees, with tests
+- the analysis panel, an MTF panel and toggleable chart overlays
+
+Signals (BUY/SELL), trade plans (Entry/SL/TP), the scanner, news and backtesting are
+**not implemented yet**. Their fields show explicit placeholders ("--"), and no fake
+data is shown anywhere.
+
+Analysis definitions, defaults, density checks and validation results are in
+[`docs/market-intelligence.md`](docs/market-intelligence.md).
 
 OKX endpoints, behaviour and the real-exchange validation results are in
 [`docs/okx-market-data.md`](docs/okx-market-data.md).
@@ -169,6 +183,7 @@ macOS / Linux / Git Bash:
 | API (direct)             | http://127.0.0.1:8000/api/v1            |
 | Health check             | http://127.0.0.1:8000/api/v1/health     |
 | Market feed health       | http://127.0.0.1:8000/api/v1/markets/health (logged in) |
+| Analysis snapshot        | http://127.0.0.1:8000/api/v1/analysis/BTCUSDT?timeframe=5m (logged in) |
 | API docs (dev only)      | http://127.0.0.1:8000/api/docs          |
 | WebSocket (via Vite)     | ws://localhost:5173/api/v1/ws           |
 
@@ -189,6 +204,7 @@ browser uses one origin and the secure httpOnly session cookie just works.
 | Create admin            | `python -m app.scripts.create_admin`               |
 | Tests                   | `pytest`                                           |
 | Live OKX tests (internet) | `pytest -m live`                                 |
+| Live analysis tests (internet) | `pytest -m live_analysis`                   |
 | Lint                    | `ruff check .`                                     |
 | Format                  | `ruff format .`                                    |
 | Type-check (strict)     | `mypy app tests alembic`                           |
@@ -231,7 +247,8 @@ wese-trade/
 │   │   ├── services/        Domain logic (users, health)
 │   │   ├── websocket/       Event envelope, per-client queues, /ws + market protocol
 │   │   ├── market_data/     Models, provider protocol, okx/ adapter, services/, engine
-│   │   ├── signal_engine/   Contracts only (labels, states, Strategy protocol)
+│   │   ├── analysis/        Market intelligence engine (Phase 3) + live AnalysisService
+│   │   ├── signal_engine/   Contracts only (labels, states, Strategy protocol; Phase 4)
 │   │   ├── backtesting/     Contracts only
 │   │   ├── scanner/         Contracts only
 │   │   ├── news/            Contracts + honest empty feed
@@ -245,7 +262,7 @@ wese-trade/
 │       ├── app/             Root component, router, query client
 │       ├── layouts/         App shell + header
 │       ├── pages/           Login, dashboard, 404
-│       ├── features/        auth, charts, markets, news, signals, header, weather, realtime
+│       ├── features/        auth, analysis, charts, markets, news, signals, header, weather, realtime
 │       ├── components/ui/   Design-system primitives
 │       ├── stores/          Zustand stores
 │       ├── services/        REST clients, WebSocket client + MarketFeed, weather service
@@ -254,6 +271,7 @@ wese-trade/
 │       └── styles/          Design tokens (dark/light) + global CSS
 ├── docs/architecture.md     Architecture + future domain contracts
 ├── docs/okx-market-data.md    OKX API usage, behaviour, real validation results
+├── docs/market-intelligence.md  Analysis definitions, no-repaint rules, defaults, validation
 ├── docs/bingx-market-data.md  Historical: the former BingX provider (removed)
 └── scripts/                 dev.sh (run both), check.sh (all quality gates)
 ```
@@ -303,6 +321,8 @@ For design decisions and the future analysis pipeline, see
 - **Upgrading from NeuralShot**: the default database file is now `backend/data/wese_trade.db`.
   To keep existing users, rename `backend/data/neuralshot.db` to `wese_trade.db` (or set
   `DATABASE_URL`). Everyone must sign in again once after the rename.
+- **Analysis panel says "بيانات غير كافية للتحليل"**: the stream has fewer than 300 closed
+  candles (e.g. a newly listed contract). Analysis needs EMA200 plus a warm-up period.
 - **Login says the server is unreachable**: make sure the backend (step 7) is running on
   port 8000.
 - **`create_admin` says the database is not initialised**: run `alembic upgrade head` first.

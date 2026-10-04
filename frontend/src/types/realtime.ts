@@ -14,6 +14,7 @@ export const EVENT_TYPES = {
   // Reserved for later phases (never emitted by the phase 1 backend):
   marketTick: 'market.tick',
   marketCandle: 'market.candle',
+  analysisUpdate: 'analysis.update',
   signalLive: 'signal.live',
   signalConfirmed: 'signal.confirmed',
   scannerUpdate: 'scanner.update',

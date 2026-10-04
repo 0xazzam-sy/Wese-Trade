@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
+from app.analysis.service import AnalysisService
 from app.api.v1.router import api_router
 from app.auth.rate_limit import LoginRateLimiter
 from app.core.config import API_V1_PREFIX, BACKEND_DIR, Settings, get_settings
@@ -27,12 +28,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     configure_logging(settings.log_level, json_output=settings.is_production)
 
     connections = ConnectionManager()
+    market = build_market_engine(settings, connections) if settings.market_data_enabled else None
     resources = AppResources(
         settings=settings,
         database=Database(settings),
         login_limiter=LoginRateLimiter(),
         connections=connections,
-        market=build_market_engine(settings, connections) if settings.market_data_enabled else None,
+        market=market,
+        analysis=(
+            AnalysisService(market, include_debug=not settings.is_production)
+            if market is not None
+            else None
+        ),
     )
 
     @asynccontextmanager
@@ -50,7 +57,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if resources.market is not None:
             # Starts in the background: an exchange outage never blocks or crashes startup.
             await resources.market.start()
+        if resources.analysis is not None:
+            await resources.analysis.start()
         yield
+        if resources.analysis is not None:
+            await resources.analysis.stop()
         if resources.market is not None:
             await resources.market.stop()
         await resources.connections.close_all(CLOSE_SERVER_SHUTDOWN, "server_shutdown")

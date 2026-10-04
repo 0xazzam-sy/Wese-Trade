@@ -1,4 +1,21 @@
-import { Activity, Info } from 'lucide-react';
+import { Activity, Bug, Info } from 'lucide-react';
+import { useState } from 'react';
+
+import { IconButton } from '@/components/ui/IconButton';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
+import { AnalysisDebug } from '@/features/analysis/components/AnalysisDebug';
+import { MtfPanel } from '@/features/analysis/components/MtfPanel';
+import { NOT_READY_AR } from '@/features/analysis/lib/labels';
+import {
+  panelMetrics,
+  timeframeLabel,
+  type PanelMetric,
+  type Tone,
+} from '@/features/analysis/lib/panelMetrics';
+import { cn } from '@/lib/cn';
+import { useAnalysisStore } from '@/stores/analysisStore';
+import type { ChartId } from '@/stores/layoutStore';
+import type { AnalysisSnapshot } from '@/types/analysis';
 
 interface Metric {
   label: string;
@@ -8,6 +25,7 @@ interface Metric {
   abbr?: string;
 }
 
+/** Trade-plan fields belong to the future signal engine (phase 4): always "--" here. */
 const PLAN_METRICS: Metric[] = [
   { label: 'سعر الدخول', abbr: 'Entry' },
   { label: 'وقف الخسارة', abbr: 'SL' },
@@ -17,21 +35,26 @@ const PLAN_METRICS: Metric[] = [
   { label: 'نسبة المخاطرة إلى العائد', short: 'المخاطرة/العائد', abbr: 'R:R' },
 ];
 
-const CONTEXT_METRICS: Metric[] = [
-  { label: 'الاتجاه' },
-  { label: 'الهيكل', abbr: 'BOS/CHoCH' },
-  { label: 'السيولة' },
-  { label: 'الزخم' },
-  { label: 'التذبذب' },
-];
-
 const EMPTY_VALUE = '--';
 
-function MetricCell({ metric }: { metric: Metric }) {
+const TONE_CLASS: Record<Tone, string> = {
+  bull: 'text-bull',
+  bear: 'text-bear',
+  neutral: 'text-fg',
+  warning: 'text-warning',
+  muted: 'text-fg-muted',
+};
+
+const FOCUS_OPTIONS = [
+  { value: 'primary', label: 'الرئيسي' },
+  { value: 'secondary', label: 'الثانوي' },
+] as const satisfies readonly { value: ChartId; label: string }[];
+
+function PlanCell({ metric }: { metric: Metric }) {
   return (
     <div
-      title={metric.label}
-      className="bg-sunken border-line flex min-w-0 flex-col gap-1 rounded-lg border px-2.5 py-2"
+      title={`${metric.label} — غير متاح بعد`}
+      className="bg-sunken border-line flex min-w-0 flex-col gap-1 rounded-lg border px-2.5 py-1.5"
     >
       <span className="text-fg-subtle text-2xs flex items-center gap-1.5 truncate">
         {metric.short ? (
@@ -51,18 +74,88 @@ function MetricCell({ metric }: { metric: Metric }) {
   );
 }
 
+function AnalysisCell({ metric }: { metric: PanelMetric }) {
+  return (
+    <div
+      data-metric={metric.key}
+      title={metric.detail ? `${metric.value} — ${metric.detail}` : metric.value}
+      className="bg-sunken border-line flex min-w-0 flex-col gap-0.5 rounded-lg border px-2.5 py-1.5"
+    >
+      <span className="text-fg-subtle text-2xs truncate">{metric.label}</span>
+      <span className={cn('truncate text-xs font-semibold', TONE_CLASS[metric.tone])}>
+        {metric.value}
+      </span>
+      <span className="text-fg-subtle text-2xs ns-num truncate">{metric.detail ?? ' '}</span>
+    </div>
+  );
+}
+
+function statusText(snapshot: AnalysisSnapshot | null): string | null {
+  if (!snapshot) return NOT_READY_AR.loading_history ?? null;
+  if (!snapshot.analysis_ready) {
+    return NOT_READY_AR[snapshot.reason ?? ''] ?? 'التحليل غير متاح';
+  }
+  return null;
+}
+
 /**
- * Reserved signal panel. Phase 1 has no signal engine, so every value is an explicit
- * placeholder ("--"). Nothing here is computed in the browser.
+ * Analysis panel. Every value is computed by the backend analysis engine; React only
+ * formats it. Signal label, strength and the trade plan (Entry/SL/TP/R:R) belong to the
+ * future signal engine and stay "--" in this phase.
  */
 export function SignalPanel() {
+  const focused = useAnalysisStore((s) => s.focused);
+  const setFocused = useAnalysisStore((s) => s.setFocused);
+  const snapshot = useAnalysisStore((s) => s.byChart[s.focused]);
+  const [debugOpen, setDebugOpen] = useState(false);
+  const metrics = panelMetrics(snapshot);
+  const status = statusText(snapshot);
+
   return (
-    <section aria-label="لوحة الإشارة" className="ns-panel @container shrink-0 p-3">
+    <section
+      aria-label="لوحة التحليل"
+      data-analysis-state={snapshot ? (snapshot.analysis_ready ? 'ready' : 'not-ready') : 'none'}
+      className="ns-panel @container shrink-0 p-3"
+    >
+      <header className="mb-2 flex items-center gap-2">
+        <h2 className="text-sm font-semibold">تحليل السوق</h2>
+        {snapshot && (
+          <span className="ns-ltr text-fg-muted bg-sunken border-line rounded-md border px-1.5 text-xs">
+            {snapshot.symbol} · {timeframeLabel(snapshot.timeframe)}
+          </span>
+        )}
+        {status && (
+          <span role="status" className="text-fg-subtle text-2xs">
+            {status}
+          </span>
+        )}
+        <div className="ms-auto flex items-center gap-1.5">
+          <SegmentedControl
+            size="sm"
+            ariaLabel="الرسم الذي يصفه التحليل"
+            value={focused}
+            options={FOCUS_OPTIONS}
+            onChange={setFocused}
+          />
+          {import.meta.env.DEV && (
+            <IconButton
+              size="sm"
+              label="عرض بيانات التطوير"
+              active={debugOpen}
+              onClick={() => {
+                setDebugOpen((v) => !v);
+              }}
+              icon={<Bug className="size-3.5" />}
+            />
+          )}
+        </div>
+      </header>
+
       <div className="flex gap-3">
-        <div className="border-line flex w-44 shrink-0 flex-col gap-2 border-e pe-3 @5xl:w-56">
+        <div className="border-line flex w-40 shrink-0 flex-col gap-2 border-e pe-3 @5xl:w-52">
           <div className="flex items-center gap-2">
             <Activity className="text-accent size-4" />
-            <h2 className="text-sm font-semibold">الإشارة</h2>
+            <h3 className="text-sm font-semibold">الإشارة</h3>
           </div>
           <div className="bg-neutral-soft text-fg-muted rounded-lg px-3 py-2 text-center text-sm font-medium">
             لا توجد إشارة حالياً
@@ -83,21 +176,30 @@ export function SignalPanel() {
           </div>
         </div>
 
-        <div className="grid min-w-0 flex-1 grid-cols-6 gap-2">
-          {PLAN_METRICS.map((m) => (
-            <MetricCell key={m.label} metric={m} />
-          ))}
-          <div className="col-span-6 grid grid-cols-5 gap-2">
-            {CONTEXT_METRICS.map((m) => (
-              <MetricCell key={m.label} metric={m} />
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+          <div className="grid grid-cols-6 gap-2">
+            {PLAN_METRICS.map((m) => (
+              <PlanCell key={m.label} metric={m} />
+            ))}
+          </div>
+          <div className="grid grid-cols-5 gap-2 @5xl:grid-cols-9" aria-label="مؤشرات التحليل">
+            {metrics.map((m) => (
+              <AnalysisCell key={m.key} metric={m} />
             ))}
           </div>
         </div>
+
+        <div className="border-line w-28 shrink-0 border-s ps-3 @5xl:w-36">
+          <MtfPanel context={snapshot?.analysis_ready ? snapshot.multi_timeframe : null} />
+        </div>
       </div>
+
       <p className="text-fg-subtle text-2xs mt-2 flex items-center gap-1.5">
         <Info className="size-3" />
-        قوة الإشارة ستمثل درجة توافق شروط الاستراتيجية، وليست احتمالية نجاح الصفقة.
+        التحليل وصف لحالة السوق وليس توصية. قوة الإشارة ستمثل درجة توافق شروط الاستراتيجية، وليست
+        احتمالية نجاح الصفقة.
       </p>
+      {import.meta.env.DEV && debugOpen && <AnalysisDebug snapshot={snapshot} />}
     </section>
   );
 }

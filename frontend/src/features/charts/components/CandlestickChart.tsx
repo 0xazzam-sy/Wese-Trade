@@ -20,6 +20,8 @@ interface CandlestickChartProps {
 }
 
 const NO_OVERLAYS: readonly ChartOverlay[] = [];
+/** Initial view after a history load: the most recent bars, so analysis overlays stay legible. */
+export const INITIAL_VISIBLE_BARS = 150;
 
 /**
  * Presentation-only wrapper around lightweight-charts v5. The chart instance is created
@@ -45,8 +47,14 @@ export function CandlestickChart({
     const chart = createChart(container, buildChartOptions(palette));
     const series = chart.addSeries(CandlestickSeries, buildCandlestickOptions(palette));
     chartRef.current = chart;
-    const controller = new ChartController(series, () => {
-      chart.timeScale().fitContent();
+    const controller = new ChartController(series, (count) => {
+      if (count <= INITIAL_VISIBLE_BARS) {
+        chart.timeScale().fitContent();
+        return;
+      }
+      chart
+        .timeScale()
+        .setVisibleLogicalRange({ from: count - INITIAL_VISIBLE_BARS, to: count + 4 });
     });
     seriesOptionsRef.current = (p) => {
       series.applyOptions(buildCandlestickOptions(p));

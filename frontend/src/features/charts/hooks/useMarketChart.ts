@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 
+import { applyAnalysisUpdate } from '@/features/analysis/lib/merge';
 import type { ChartController } from '@/features/charts/lib/ChartController';
 import { priceFormatFor } from '@/features/charts/lib/candles';
 import { ApiError } from '@/lib/http';
 import { marketsApi } from '@/services/api/markets';
 import { marketFeed } from '@/services/realtime/marketFeed';
+import type { AnalysisSnapshot } from '@/types/analysis';
 import type { CandleBar, MarketSymbol, StreamState, Timeframe } from '@/types/market';
 
 export const HISTORY_LIMIT = 800;
@@ -18,6 +20,8 @@ export type ChartLoadState =
 export interface MarketChartState {
   load: ChartLoadState;
   stream: StreamState | null;
+  /** Backend analysis for exactly this symbol/timeframe (null until the first update). */
+  analysis: AnalysisSnapshot | null;
   reload: () => void;
 }
 
@@ -52,8 +56,15 @@ export function useMarketChart(
   const runKey = `${symbol}|${timeframe}|${reloadToken}`;
   const [loadState, setLoadState] = useState<{ key: string; value: ChartLoadState } | null>(null);
   const [streamState, setStreamState] = useState<{ key: string; value: StreamState } | null>(null);
+  // Analysis survives a history reload of the same stream, but never a symbol/timeframe switch.
+  const streamKey = `${symbol}|${timeframe}`;
+  const [analysisState, setAnalysisState] = useState<{
+    key: string;
+    value: AnalysisSnapshot | null;
+  } | null>(null);
   const load: ChartLoadState = loadState?.key === runKey ? loadState.value : { status: 'loading' };
   const stream = streamState?.key === runKey ? streamState.value : null;
+  const analysis = analysisState?.key === streamKey ? analysisState.value : null;
 
   useEffect(() => {
     // setData() does not reset series options, so this survives chart resets.
@@ -94,6 +105,15 @@ export function useMarketChart(
       onResync: () => {
         if (active) reload();
       },
+      onAnalysis: (update) => {
+        if (!active) return;
+        const expected = { symbol, timeframe };
+        const key = `${symbol}|${timeframe}`;
+        setAnalysisState((prev) => ({
+          key,
+          value: applyAnalysisUpdate(prev?.key === key ? prev.value : null, update, expected),
+        }));
+      },
       onError: (code) => {
         if (!active) return;
         if (code === 'unknown_symbol' || code === 'symbol_unavailable') {
@@ -127,5 +147,5 @@ export function useMarketChart(
     };
   }, [controllerRef, symbol, timeframe, reloadToken, reload]);
 
-  return { load, stream, reload };
+  return { load, stream, analysis, reload };
 }

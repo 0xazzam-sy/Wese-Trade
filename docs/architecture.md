@@ -93,9 +93,10 @@ must match `FRONTEND_ORIGIN`.
 | `market.stream`    | S → C     | 2     | Per stream: `live` / `stale` / `reconnecting` / `unavailable` |
 | `market.resync`    | S → C     | 2     | History changed (gap recovery): refetch it      |
 | `market.status`    | S → C     | 2     | Exchange feed: connected/connecting/reconnecting/degraded/disconnected |
-| `signal.live`      | S → C     | 3     | Developing signal (may change until close)      |
-| `signal.confirmed` | S → C     | 3     | Signal confirmed at candle close                |
-| `scanner.update`   | S → C     | 3     | Scanner row changes                             |
+| `analysis.update`  | S → C     | 3     | Market analysis for a subscribed stream: `kind: "full"` (subscribe, every candle close) or `"live"` (forming-candle fields, throttled) |
+| `signal.live`      | S → C     | 4     | Developing signal (may change until close)      |
+| `signal.confirmed` | S → C     | 4     | Signal confirmed at candle close                |
+| `scanner.update`   | S → C     | 4+    | Scanner row changes                             |
 
 Close codes: `4401` unauthorized, `4403` session expired (client stops reconnecting and
 returns to login), `1001` server shutdown. Any other close triggers exponential-backoff
@@ -146,6 +147,28 @@ OKX REST + 2 WS ─► okx/ (rest.py, stream.py, parser.py, provider.py)       e
   `series.update()` with ordering invariants. `useMarketChart` runs per chart with
   generation guards, so switching symbol or timeframe can never show stale candles.
 
+### Phase 3 implementation: market intelligence (see `docs/market-intelligence.md`)
+
+```
+MarketDataEngine ──candle_listeners / resync_listeners──► analysis/service.py (AnalysisService)
+                                                              │ one MarketAnalyzer per (symbol, timeframe),
+                                                              │ seeded from 1000 candles, then +1 per close;
+                                                              │ MTF context streams subscribed internally
+                                                              ▼
+                          analysis/engine.py  MarketAnalyzer.update(closed) / .snapshot(forming)
+                            indicators/ · regime/ · structure/ · liquidity/ · zones/ · multi_timeframe/
+                                                              ▼
+           api/v1/endpoints/analysis.py (REST)        `analysis.update` via the app WebSocket
+```
+
+- `MarketAnalyzer` is the **single canonical implementation** shared by live analysis and
+  (later) the scanner, backtester and signal engine. It is a deterministic streaming state
+  machine: confirmed facts never repaint, and the forming candle only produces
+  `developing` features (tested by the no-lookahead/replay suite).
+- The engine never imports FastAPI or exchange code; the service never parses exchange
+  formats. `news` is never imported by `analysis`.
+- Output is **analysis only**: no labels, entries, stops, targets or confidence.
+
 ---
 
 ## 5. Future analysis pipeline
@@ -159,21 +182,19 @@ Normalizer                    (symbols, Decimal prices, UTC times, 10m aggregati
   ↓
 Candle Store / Live State     (closed candles persisted; forming candle in memory)
   ↓
-Feature Calculation           (EMA, RSI, ATR, volume profiles … pure functions)
+Feature Calculation           (EMA, RSI, ATR, volume … streaming)        ✅ phase 3
   ↓
-Market Regime                 (trending / ranging / volatile classification)
+Market Regime                 (directional + volatility regime)          ✅ phase 3
   ↓
-Structure Engine              (swings, BOS, CHoCH)
+Structure Engine              (swing/internal pivots, BOS, CHoCH)        ✅ phase 3
   ↓
-Liquidity Engine              (equal highs/lows, sweeps, liquidity levels)
+Liquidity Engine              (EQH/EQL, pools, sweeps)                   ✅ phase 3
   ↓
-Zone Engine                   (order blocks, fair value gaps)
+Zone Engine                   (order blocks, FVG, premium/discount, OTE) ✅ phase 3
   ↓
-Momentum / Volume / Volatility
+Multi-Timeframe Context       (higher-timeframe alignment)               ✅ phase 3
   ↓
-Multi-Timeframe Context       (higher-timeframe bias and confluence)
-  ↓
-Signal Scoring Engine         (confluence → label + confidence + trade plan)
+Signal Scoring Engine         (confluence → label + confidence + trade plan)   phase 4
   ↓
 Signal Lifecycle              (developing → confirmed → closed / invalidated)
   ↓
@@ -266,9 +287,17 @@ src/
   lives in `chartStore`. Data comes from `useChartData`, which reports `unavailable` until
   phase 2.
 - **Overlays**: `features/charts/overlays` defines the `ChartOverlay` contract and an
-  `OverlayController` that diffs overlays by id. `SeriesPrimitiveOverlay` adapts v5 series
-  primitives (`series.attachPrimitive`). Planned overlays include markers
-  (`createSeriesMarkers`), order blocks, FVGs, BOS/CHoCH, liquidity levels, and Entry/SL/TP
-  price lines. Overlays only draw backend-computed data.
+  `OverlayController` that diffs overlays by id. Phase 3 adds
+  `features/analysis/overlays/AnalysisOverlay` (one v5 series primitive per chart: zones
+  beneath candles, lines/labels above) drawing a pure `buildOverlayModel(snapshot, toggles)`:
+  swing/internal pivots, BOS/CHoCH, protected levels, liquidity pools/EQH/EQL, sweeps, FVG,
+  order blocks, premium/discount and OTE. Toggles persist in `wesetrade.overlays`.
+  Overlays only draw backend-computed data. Signal markers and Entry/SL/TP lines are phase 4.
+- **Analysis UI**: `MarketFeed` routes `analysis.update` per stream (and replays the latest
+  analysis to a chart joining an existing stream); `useMarketChart` exposes it with the same
+  generation guards as candles; `features/analysis/lib/merge.ts` applies live updates only
+  on the matching full snapshot. The analysis panel (`features/signals/SignalPanel`) formats
+  the nine analysis cells and the MTF block; Entry/SL/TP/R:R stay "--". A debug view exists
+  only in development builds.
 - **Weather** is optional and isolated: provider interface + "not configured" provider.
   Location is requested only on explicit user action, with low accuracy.

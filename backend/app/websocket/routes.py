@@ -11,6 +11,7 @@ import contextlib
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
+from app.analysis.service import AnalysisService
 from app.api.deps import resolve_user_from_token
 from app.auth.tokens import ACCESS_COOKIE_NAME, InvalidTokenError, decode_access_token
 from app.core.logging import get_logger
@@ -50,7 +51,10 @@ async def _heartbeat(connection: ClientConnection, interval: float, expires_at: 
 
 
 async def _handle_message(
-    connection: ClientConnection, market: MarketDataEngine | None, raw: str
+    connection: ClientConnection,
+    market: MarketDataEngine | None,
+    raw: str,
+    analysis: AnalysisService | None = None,
 ) -> None:
     if len(raw.encode()) > MAX_CLIENT_MESSAGE_BYTES:
         await connection.send(
@@ -66,7 +70,7 @@ async def _handle_message(
     if message.type == EventType.SYSTEM_PING:
         await connection.send(EventEnvelope.of(EventType.SYSTEM_PONG, {"echo": message.data}))
     elif message.type in (EventType.MARKET_SUBSCRIBE, EventType.MARKET_UNSUBSCRIBE):
-        await handle_market_message(connection, market, message)
+        await handle_market_message(connection, market, message, analysis)
     else:
         await connection.send(
             EventEnvelope.of(
@@ -122,13 +126,15 @@ async def realtime(websocket: WebSocket) -> None:
             await connection.send(resources.market.status_event())
         while True:
             raw = await websocket.receive_text()
-            await _handle_message(connection, resources.market, raw)
+            await _handle_message(connection, resources.market, raw, resources.analysis)
     except WebSocketDisconnect:
         pass
     finally:
         heartbeat.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await heartbeat
+        if resources.analysis is not None:
+            await resources.analysis.release_all(connection.id)
         if resources.market is not None:
             await resources.market.release_all(connection.id)
         await resources.connections.unregister(connection)

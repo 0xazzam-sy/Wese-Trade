@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from app.analysis.service import AnalysisService
 from app.auth.rate_limit import LoginRateLimiter
 from app.core.config import Settings
 from app.db.session import Database
@@ -18,3 +19,4 @@ class AppResources:
     login_limiter: LoginRateLimiter
     connections: ConnectionManager
     market: MarketDataEngine | None = None
+    analysis: AnalysisService | None = None
