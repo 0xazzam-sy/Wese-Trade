@@ -245,3 +245,35 @@ pytest -m live -v           # real contracts, klines (all native intervals), 10m
 
 Then open the app and compare a few BTCUSDT 1m/5m/10m and ETHUSDT 15m OHLC values with
 BingX's own chart for the same UTC minutes.
+
+## 15. REAL EXCHANGE VALIDATION
+
+### Attempt 1 — 2026-10-04 ~06:08 UTC — BLOCKED (not performed)
+
+- **Environment:** Claude Code cloud container (Linux, Python 3.12, Node 22). Not the
+  user's local machine. Outbound HTTPS goes through an egress proxy that enforces the
+  environment's network policy.
+- **DNS:** OK. `open-api.bingx.com` and `open-api-swap.bingx.com` both resolve to
+  CloudFront addresses.
+- **REST connectivity:** FAILED. The proxy rejects `CONNECT open-api.bingx.com:443` with
+  **403** (policy denial). No TLS handshake with BingX took place, so this is not an SSL,
+  certificate or URL problem.
+- **WebSocket connectivity:** FAILED. Same 403 for `open-api-swap.bingx.com:443`.
+- **`pytest -m live -v`:** 9/9 failed, all at the first network call with
+  `BingXUnavailable: ... ProxyError: 403 Forbidden`. No BingX payload was received, so no
+  conclusion about API behaviour, parsing, intervals, compression or heartbeat is possible.
+- **Symbols, candle comparisons, 10m comparison, WebSocket, reconnect, ticker and browser
+  validation:** **not performed**. They require real BingX data.
+- **API assumptions corrected:** none (nothing could be observed).
+- **Code changes:** none.
+
+**To complete validation:**
+- Allow `open-api.bingx.com` and `open-api-swap.bingx.com` in the cloud environment's
+  network settings, **or**
+- run on a machine with normal internet access:
+  - `cd backend && pytest -m live -v`
+  - then follow steps 3–13 of the Phase 2.5 validation plan (manual OHLC comparison,
+    independent 10m check, realtime/rollover observation, switch races, reconnect, ticker
+    check, browser check).
+
+**Phase 2 remains NOT COMPLETE until this validation succeeds.**
