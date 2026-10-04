@@ -23,6 +23,7 @@ Targets (long; short mirrors)
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from itertools import pairwise
 
 from app.analysis.enums import ZoneStatus, ZoneType
@@ -95,7 +96,10 @@ def _obstacles(ctx: Ctx, family: SetupFamily) -> list[float]:
     return out
 
 
-def build_plan(ctx: Ctx, setup: Setup) -> TradePlan:
+def build_plan(
+    ctx: Ctx, setup: Setup, *, target_filter: Callable[[str], bool] | None = None
+) -> TradePlan:
+    """`target_filter` (research only) keeps target candidates by source name; None = all."""
     cfg = ctx.cfg
     atr = ctx.atr
     if atr <= 0:
@@ -149,6 +153,8 @@ def build_plan(ctx: Ctx, setup: Setup) -> TradePlan:
     front = max(tick, cfg.target_front_run_atr * atr)
     raw = []
     for level, name in _target_candidates(ctx, setup.family):
+        if target_filter is not None and not target_filter(name):
+            continue
         price_t = level - sign * front
         rr = sign * (price_t - preferred) / risk
         if cfg.tp_min_rr <= rr <= cfg.tp_max_rr:

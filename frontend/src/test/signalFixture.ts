@@ -1,4 +1,10 @@
-import type { SignalDTO, SignalEvaluationDTO, SignalView, TradePlanDTO } from '@/types/signal';
+import type {
+  SignalDTO,
+  SignalEvaluationDTO,
+  SignalView,
+  StrategyInfo,
+  TradePlanDTO,
+} from '@/types/signal';
 
 export const PLAN: TradePlanDTO = {
   entry_model: 'MARKET_ENTRY',
@@ -72,10 +78,21 @@ export function signal(overrides: Partial<SignalDTO> = {}): SignalDTO {
   };
 }
 
+export const STRATEGY: StrategyInfo = {
+  version: 'wese-trade-signal-4.0-f26f636443',
+  status: 'unproven',
+  status_ar: 'غير مُثبت',
+  label_ar: 'تجريبي',
+  forward_test: false,
+  signal_capable: true,
+  note_ar: 'استراتيجية تجريبية لم تُثبت أفضلية تاريخية بعد التكاليف — ليست توصية.',
+};
+
 export function view(overrides: Partial<SignalView> = {}): SignalView {
   return {
     symbol: 'BTCUSDT',
     timeframe: '15m',
+    strategy: STRATEGY,
     evaluation: null,
     developing: null,
     active: null,

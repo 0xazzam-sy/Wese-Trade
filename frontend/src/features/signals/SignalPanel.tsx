@@ -18,7 +18,7 @@ import { formatPrice } from '@/lib/marketFormat';
 import { useAnalysisStore } from '@/stores/analysisStore';
 import type { ChartId } from '@/stores/layoutStore';
 import type { AnalysisSnapshot } from '@/types/analysis';
-import type { TradePlanDTO } from '@/types/signal';
+import type { StrategyInfo, TradePlanDTO } from '@/types/signal';
 
 import { SignalDetails } from './components/SignalDetails';
 import { signalDisplay, type SignalDisplay } from './lib/display';
@@ -118,6 +118,26 @@ function PlanCell({
   );
 }
 
+/** Validation status of the strategy: never lets a signal look "proven" when it is not. */
+function StrategyBadge({ strategy }: { strategy: StrategyInfo }) {
+  const forward = strategy.forward_test;
+  return (
+    <span
+      data-testid="strategy-status"
+      data-status={strategy.status}
+      title={`${strategy.status_ar} — ${strategy.note_ar} (${strategy.version})`}
+      className={cn(
+        'text-2xs ms-auto truncate rounded-md border px-1.5 py-0.5 font-medium',
+        forward
+          ? 'border-accent/40 bg-accent/10 text-accent'
+          : 'border-warning/40 bg-warning/10 text-warning',
+      )}
+    >
+      {forward ? strategy.status_ar : `${strategy.label_ar} · ${strategy.status_ar}`}
+    </span>
+  );
+}
+
 function signalLabel(d: SignalDisplay): string {
   if (d.kind === 'none') return 'لا توجد إشارة حالياً';
   const name = SIGNAL_CLASS_AR[d.signalClass];
@@ -171,6 +191,7 @@ export function SignalPanel() {
   const metrics = panelMetrics(snapshot);
   const status = statusText(snapshot);
   const display = signalDisplay(view);
+  const strategy = view?.strategy ?? null;
   const developing = display.kind === 'developing';
   const plan = display.signal?.plan ?? (developing ? (display.evaluation?.plan ?? null) : null);
   const precision = snapshot ? symbols.get(snapshot.symbol)?.price_precision : undefined;
@@ -191,6 +212,7 @@ export function SignalPanel() {
           signal={display.signal}
           evaluation={display.evaluation}
           mtf={snapshot?.analysis_ready ? snapshot.multi_timeframe : null}
+          strategy={strategy}
           onClose={() => {
             setDetailsOpen(false);
           }}
@@ -245,6 +267,7 @@ export function SignalPanel() {
           <div className="flex items-center gap-2">
             <Activity className="text-accent size-4" />
             <h3 className="text-sm font-semibold">الإشارة</h3>
+            {strategy && <StrategyBadge strategy={strategy} />}
           </div>
           <div
             data-testid="signal-badge"
@@ -291,6 +314,11 @@ export function SignalPanel() {
               {state}
             </p>
           )}
+          {strategy && !strategy.signal_capable && (
+            <p className="text-warning text-2xs" data-testid="research-only">
+              إطار للبحث فقط — لا إشارات اتجاهية
+            </p>
+          )}
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col gap-2">
@@ -319,6 +347,7 @@ export function SignalPanel() {
       <p className="text-fg-subtle text-2xs mt-2 flex items-center gap-1.5">
         <Info className="size-3" />
         {RISK_NOTE} قوة الإشارة درجة توافق شروط الاستراتيجية، وليست احتمالية نجاح الصفقة.
+        {strategy && !strategy.forward_test && ` ${strategy.note_ar}`}
       </p>
       {import.meta.env.DEV && debugOpen && <AnalysisDebug snapshot={snapshot} />}
     </section>

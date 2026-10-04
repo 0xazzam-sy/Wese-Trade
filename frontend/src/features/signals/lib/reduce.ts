@@ -1,4 +1,4 @@
-import type { SignalDTO, SignalEvaluationDTO, SignalView } from '@/types/signal';
+import type { SignalDTO, SignalEvaluationDTO, SignalView, StrategyInfo } from '@/types/signal';
 
 export const SIGNAL_EVENTS = [
   'signal.developing',
@@ -12,6 +12,7 @@ export function emptyView(symbol: string, timeframe: string): SignalView {
   return {
     symbol,
     timeframe,
+    strategy: null,
     evaluation: null,
     developing: null,
     active: null,
@@ -37,7 +38,9 @@ export function applySignalEvent(
   expected: { symbol: string; timeframe: string },
 ): SignalView | null {
   if (data.symbol !== expected.symbol || data.timeframe !== expected.timeframe) return view;
-  const base = view ?? emptyView(expected.symbol, expected.timeframe);
+  const prev = view ?? emptyView(expected.symbol, expected.timeframe);
+  const strategy = (data.strategy as StrategyInfo | undefined) ?? prev.strategy;
+  const base = strategy === prev.strategy ? prev : { ...prev, strategy };
   const signal = (data.signal as SignalDTO | undefined) ?? null;
   const evaluation = (data.evaluation as SignalEvaluationDTO | undefined) ?? null;
   switch (type) {

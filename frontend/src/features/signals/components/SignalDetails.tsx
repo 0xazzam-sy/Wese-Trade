@@ -4,7 +4,7 @@ import { ALIGNMENT_AR } from '@/features/analysis/lib/labels';
 import { timeframeLabel } from '@/features/analysis/lib/panelMetrics';
 import { cn } from '@/lib/cn';
 import type { MultiTimeframeContext } from '@/types/analysis';
-import type { ComponentDTO, SignalDTO, SignalEvaluationDTO } from '@/types/signal';
+import type { ComponentDTO, SignalDTO, SignalEvaluationDTO, StrategyInfo } from '@/types/signal';
 
 import {
   COMPONENT_AR,
@@ -19,6 +19,7 @@ interface Props {
   signal: SignalDTO | null;
   evaluation: SignalEvaluationDTO | null;
   mtf: MultiTimeframeContext | null | undefined;
+  strategy?: StrategyInfo | null;
   onClose: () => void;
 }
 
@@ -46,7 +47,7 @@ function Components({ items }: { items: ComponentDTO[] }) {
 }
 
 /** Compact details drawer: why the engine said what it said. Display only. */
-export function SignalDetails({ signal, evaluation, mtf, onClose }: Props) {
+export function SignalDetails({ signal, evaluation, mtf, strategy, onClose }: Props) {
   const hyp = evaluation?.hypothesis ?? null;
   const family = signal?.family ?? hyp?.family;
   const signalClass = signal?.signal_class ?? evaluation?.signal_class ?? 'NEUTRAL';
@@ -90,6 +91,8 @@ export function SignalDetails({ signal, evaluation, mtf, onClose }: Props) {
         </dd>
         <dt className="text-fg-subtle">وقت الإنشاء</dt>
         <dd className="ns-num">{created ?? '--'}</dd>
+        <dt className="text-fg-subtle">حالة الاستراتيجية</dt>
+        <dd>{strategy ? `${strategy.status_ar} (${strategy.label_ar})` : '--'}</dd>
         <dt className="text-fg-subtle">السياق متعدد الفريمات</dt>
         <dd>
           {mtf

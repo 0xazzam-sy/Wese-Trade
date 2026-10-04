@@ -35,6 +35,7 @@ from app.signal_engine.lifecycle import SignalTracker
 from app.signal_engine.models import Signal, SignalEvaluation
 from app.signal_engine.runtime import evaluate_closed, evaluate_developing
 from app.signal_engine.serialize import evaluation_payload, signal_payload
+from app.signal_engine.validation import ACTIVE_DEPLOYMENT, StrategyDeployment
 from app.websocket.events import EventEnvelope, EventType
 
 logger = get_logger(__name__)
@@ -66,8 +67,10 @@ class SignalService:
         market: MarketDataEngine,
         database: Database | None,
         config: SignalConfig = DEFAULT_SIGNAL_CONFIG,
+        deployment: StrategyDeployment = ACTIVE_DEPLOYMENT,
     ) -> None:
         self.analysis = analysis
+        self.deployment = deployment
         self.market = market
         self.database = database
         self.config = config
@@ -179,7 +182,9 @@ class SignalService:
             return
         stream.pending_close = None
         frames = self.analysis.context_frames(stream.key)
-        ev = evaluate_closed(self.engine, analyzer, frames, market_stale=self._stale(stream.key))
+        ev = self.deployment.apply(
+            evaluate_closed(self.engine, analyzer, frames, market_stale=self._stale(stream.key))
+        )
         self.stats["evaluations"] += 1
         stream.current = ev
         stream.tracker.on_evaluation(ev, analyzer.series.last)
@@ -204,7 +209,9 @@ class SignalService:
         if stream.current is not None:
             return
         frames = self.analysis.context_frames(stream.key)
-        ev = evaluate_closed(self.engine, analyzer, frames, market_stale=self._stale(stream.key))
+        ev = self.deployment.apply(
+            evaluate_closed(self.engine, analyzer, frames, market_stale=self._stale(stream.key))
+        )
         if ev.is_trade:
             return
         stream.current = ev
@@ -239,12 +246,14 @@ class SignalService:
         forming = self.analysis.forming(stream.key)
         if analyzer is None or forming is None:
             return
-        ev = evaluate_developing(
-            self.engine,
-            analyzer,
-            forming,
-            self.analysis.context_frames(stream.key),
-            market_stale=self._stale(stream.key),
+        ev = self.deployment.apply(
+            evaluate_developing(
+                self.engine,
+                analyzer,
+                forming,
+                self.analysis.context_frames(stream.key),
+                market_stale=self._stale(stream.key),
+            )
         )
         previous = stream.developing
         changed = (previous is None) != (ev is None) or (
@@ -293,7 +302,12 @@ class SignalService:
     def _publish(self, stream: _Stream, event: EventType, data: dict[str, Any]) -> None:
         consumers = self.analysis.consumers(stream.key)
         if consumers:
-            payload = {"symbol": stream.key[0], "timeframe": stream.key[1].value, **data}
+            payload = {
+                "symbol": stream.key[0],
+                "timeframe": stream.key[1].value,
+                "strategy": self.deployment.info(stream.key[1].value),
+                **data,
+            }
             self.market.publisher.send_to(consumers, EventEnvelope.of(event, payload))
 
     def _state_event(self, stream: _Stream) -> EventEnvelope:
@@ -304,6 +318,7 @@ class SignalService:
         return {
             "symbol": key[0],
             "timeframe": key[1].value,
+            "strategy": self.deployment.info(key[1].value),
             "evaluation": evaluation_payload(stream.current) if stream and stream.current else None,
             "developing": evaluation_payload(stream.developing)
             if stream and stream.developing
@@ -342,7 +357,7 @@ class SignalService:
         if key in self.streams and self.streams[key].current is not None:
             return self.state(key)
         analyzer, _forming, frames = await self.analysis.on_demand(key)
-        ev = evaluate_closed(self.engine, analyzer, frames)
+        ev = self.deployment.apply(evaluate_closed(self.engine, analyzer, frames))
         state = self.state(key)
         state["evaluation"] = evaluation_payload(ev)
         return state
@@ -350,6 +365,8 @@ class SignalService:
     def health(self) -> dict[str, Any]:
         return {
             "strategy_version": self.engine.version,
+            "validation_status": self.deployment.status.value,
+            "signal_timeframes": sorted(self.deployment.signal_timeframes),
             "streams": {
                 _label(k): {
                     "active": s.tracker.active.id if s.tracker.active else None,

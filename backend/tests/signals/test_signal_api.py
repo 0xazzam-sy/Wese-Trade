@@ -17,7 +17,7 @@ from app.core.state import AppResources
 from app.market_data.engine import MarketDataEngine
 from app.market_data.timeframes import Timeframe
 from app.services import signal_store
-from app.signal_engine.enums import SignalState
+from app.signal_engine.enums import SignalClass, SignalState
 from app.signal_engine.lifecycle import SignalTracker
 from app.signal_engine.models import Signal
 from app.signal_engine.service import SignalService
@@ -98,11 +98,18 @@ async def test_signal_endpoint_returns_transparent_evaluation(api: httpx.AsyncCl
     assert set(body) == {
         "symbol",
         "timeframe",
+        "strategy",
         "evaluation",
         "developing",
         "active",
         "last_confirmed",
     }
+    strategy = body["strategy"]
+    assert strategy["status"] == "unproven" and strategy["status_ar"] == "غير مُثبت"
+    assert strategy["label_ar"] == "تجريبي" and strategy["forward_test"] is False
+    # 5m is research-only for the frozen baseline: never a directional live signal.
+    assert strategy["signal_capable"] is False
+    assert ev["signal_class"] == "NEUTRAL"
     for key in _walk_keys(body):
         assert not any(word in key.lower() for word in FORBIDDEN), key
     assert (await api.get("/api/v1/signals/NOPE", params={"timeframe": "5m"})).status_code == 404
@@ -193,7 +200,8 @@ async def test_seed_evaluation_is_display_only_and_withholds_trades(
 
     # A non-NEUTRAL seed result is never shown or tracked: no live signal was issued for it.
     stream.current, stream.seed_pending = None, True
-    trade = SimpleNamespace(is_trade=True)
+    # (a 15m-like trade passes the timeframe policy unchanged, so only the seed rule acts)
+    trade = SimpleNamespace(is_trade=True, signal_class=SignalClass.BUY, timeframe="15m")
     monkeypatch.setattr("app.signal_engine.service.evaluate_closed", lambda *a, **k: trade)
     before = len(publisher.of_type("signal.updated", "c1"))
     signals._try_seed(stream, force=True)

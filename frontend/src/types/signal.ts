@@ -113,10 +113,26 @@ export interface SignalDTO {
   history: [number, string][];
 }
 
+export type ValidationStatus =
+  'unproven' | 'testing' | 'passed_historical' | 'forward_test' | 'rejected';
+
+/** Validation status of the strategy version behind the signals (backend deployment). */
+export interface StrategyInfo {
+  version: string;
+  status: ValidationStatus;
+  status_ar: string;
+  label_ar: string;
+  forward_test: boolean;
+  /** False = research-only timeframe: the engine evaluates but never emits BUY/SELL. */
+  signal_capable: boolean;
+  note_ar: string;
+}
+
 /** Per-stream signal view: what the panel and chart overlays display. */
 export interface SignalView {
   symbol: string;
   timeframe: string;
+  strategy: StrategyInfo | null;
   evaluation: SignalEvaluationDTO | null; // last closed-candle evaluation
   developing: SignalEvaluationDTO | null; // forming candle (never a trade)
   active: SignalDTO | null; // open confirmed signal

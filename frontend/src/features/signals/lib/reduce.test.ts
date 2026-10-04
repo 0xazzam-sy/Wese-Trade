@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { evaluation, signal } from '@/test/signalFixture';
+import { evaluation, signal, STRATEGY } from '@/test/signalFixture';
 
 import { applySignalEvent } from './reduce';
 
@@ -92,5 +92,22 @@ describe('applySignalEvent', () => {
     );
     expect(v?.active?.id).toBe('sig-1');
     expect(v?.evaluation?.signal_class).toBe('NEUTRAL');
+  });
+
+  it('keeps the latest strategy validation status from any event', () => {
+    let v = applySignalEvent(
+      null,
+      'signal.updated',
+      { ...base, strategy: STRATEGY, evaluation: evaluation() },
+      KEY,
+    );
+    expect(v?.strategy?.status).toBe('unproven');
+    v = applySignalEvent(
+      v,
+      'signal.developing',
+      { ...base, evaluation: evaluation({ developing: true }) },
+      KEY,
+    );
+    expect(v?.strategy?.label_ar).toBe('تجريبي');
   });
 });

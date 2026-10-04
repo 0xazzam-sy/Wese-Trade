@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { useAnalysisStore } from '@/stores/analysisStore';
 import { notReady, readySnapshot } from '@/test/analysisFixture';
-import { evaluation, PLAN, signal, view } from '@/test/signalFixture';
+import { evaluation, PLAN, signal, STRATEGY, view } from '@/test/signalFixture';
 import type { SignalView } from '@/types/signal';
 
 import { SignalPanel } from './SignalPanel';
@@ -181,6 +181,44 @@ describe('SignalPanel (analysis)', () => {
     expect(drawer).toHaveTextContent('الإطار الأعلى صاعد');
     expect(drawer).toHaveTextContent('الحجم أقل من المتوسط');
     expect(drawer).toHaveTextContent('78/100');
+  });
+
+  it('labels the unproven baseline as experimental, never as proven', () => {
+    render(<SignalPanel />);
+    setPrimary(readySnapshot());
+    setSignal(view({ active: signal() }));
+    const badge = screen.getByTestId('strategy-status');
+    expect(badge).toHaveAttribute('data-status', 'unproven');
+    expect(badge).toHaveTextContent('تجريبي · غير مُثبت');
+    expect(screen.getByLabelText('لوحة التحليل')).toHaveTextContent('ليست توصية');
+    expect(screen.queryByTestId('research-only')).toBeNull();
+  });
+
+  it('shows the forward-test badge for a forward-tested strategy', () => {
+    render(<SignalPanel />);
+    setPrimary(readySnapshot());
+    setSignal(
+      view({
+        strategy: {
+          ...STRATEGY,
+          status: 'forward_test',
+          status_ar: 'اختبار مباشر',
+          forward_test: true,
+        },
+        active: signal(),
+      }),
+    );
+    const badge = screen.getByTestId('strategy-status');
+    expect(badge).toHaveTextContent('اختبار مباشر');
+    expect(badge).toHaveAttribute('data-status', 'forward_test');
+  });
+
+  it('marks research-only timeframes', () => {
+    render(<SignalPanel />);
+    setPrimary(readySnapshot());
+    setSignal(view({ strategy: { ...STRATEGY, signal_capable: false }, evaluation: evaluation() }));
+    expect(screen.getByTestId('research-only')).toHaveTextContent('إطار للبحث فقط');
+    expect(screen.getByTestId('signal-badge')).toHaveTextContent('محايد');
   });
 
   it('switches between the primary and secondary chart analysis', () => {
