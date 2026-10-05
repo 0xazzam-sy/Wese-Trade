@@ -35,3 +35,11 @@ npm-debug.log*
 
 # Logs
 *.log
+
+# Desktop (Tauri) build outputs
+desktop/node_modules/
+desktop/src-tauri/target/
+desktop/src-tauri/gen/
+desktop/src-tauri/resources/backend/*
+!desktop/src-tauri/resources/backend/README.md
+desktop/assets/icon-1024.png

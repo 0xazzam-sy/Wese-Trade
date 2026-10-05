@@ -138,7 +138,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost"])
     app.include_router(api_router, prefix=API_V1_PREFIX)
     if settings.web_dir is not None:
-        mount_web(app, settings.web_dir)
+        mount_web(app, settings.web_dir, desktop=settings.is_desktop)
     return app
 
 

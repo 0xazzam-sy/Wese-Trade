@@ -1,0 +1,3 @@
+# Desktop packaging (PyInstaller one-folder sidecar). Not needed for development.
+-r requirements.txt
+pyinstaller>=6.11,<7.0

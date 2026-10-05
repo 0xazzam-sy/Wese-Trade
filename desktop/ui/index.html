@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Wese Trade</title>
+    <link rel="stylesheet" href="shell.css" />
+    <script src="shell.js" defer></script>
+  </head>
+  <body>
+    <main class="card">
+      <img src="logo.svg" alt="" class="logo" />
+      <h1>Wese Trade</h1>
+      <section id="starting">
+        <div class="spinner" aria-hidden="true"></div>
+        <p role="status">جاري تشغيل Wese Trade…</p>
+        <p class="hint">تجهيز قاعدة البيانات والخدمة المحلية. لا يلزم اتصال بالإنترنت للتشغيل.</p>
+      </section>
+      <section id="failed" hidden>
+        <h2 class="error">تعذر تشغيل خدمة Wese Trade المحلية</h2>
+        <p id="failed-reason"></p>
+        <p class="hint">بياناتك محفوظة ولم يُحذف شيء.</p>
+      </section>
+      <section id="crashed" hidden>
+        <h2 class="error">تعطلت خدمة Wese Trade المحلية</h2>
+        <p>توقفت الخدمة بشكل غير متوقع. بياناتك محفوظة؛ يمكنك إعادة تشغيل الخدمة.</p>
+      </section>
+      <div id="actions" class="actions" hidden>
+        <button id="restart-service" type="button">إعادة تشغيل الخدمة</button>
+        <button id="open-logs" type="button" class="secondary">فتح السجلات</button>
+        <button id="restart-app" type="button" class="secondary">إعادة تشغيل التطبيق</button>
+      </div>
+      <p class="foot">منصة تحليل فقط — لا يتم تنفيذ أي صفقات.</p>
+    </main>
+  </body>
+</html>

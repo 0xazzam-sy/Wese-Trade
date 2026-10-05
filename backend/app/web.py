@@ -18,7 +18,11 @@ from starlette.types import Scope
 from app.core.config import API_V1_PREFIX
 
 
-def content_security_policy(host: str) -> str:
+TAURI_IPC = "ipc: http://ipc.localhost"  # desktop shell IPC (fixed, local-only schemes)
+
+
+def content_security_policy(host: str, *, desktop: bool = False) -> str:
+    ipc = f" {TAURI_IPC}" if desktop else ""
     return "; ".join(
         (
             "default-src 'self'",
@@ -28,7 +32,7 @@ def content_security_policy(host: str) -> str:
             "img-src 'self' data: blob:",
             "font-src 'self' data:",
             # Only the local backend (HTTP + WebSocket). The UI never calls OKX directly.
-            f"connect-src 'self' ws://{host} http://{host}",
+            f"connect-src 'self' ws://{host} http://{host}{ipc}",
             "object-src 'none'",
             "base-uri 'self'",
             "form-action 'self'",
@@ -49,7 +53,7 @@ class SpaStaticFiles(StaticFiles):
             return await super().get_response("index.html", scope)
 
 
-def mount_web(app: FastAPI, web_dir: Path) -> None:
+def mount_web(app: FastAPI, web_dir: Path, *, desktop: bool = False) -> None:
     index = web_dir / "index.html"
     if not index.is_file():
         raise RuntimeError(f"compiled web app not found: {index}")
@@ -61,7 +65,7 @@ def mount_web(app: FastAPI, web_dir: Path) -> None:
         response = await call_next(request)
         if not request.url.path.startswith(API_V1_PREFIX):
             response.headers["Content-Security-Policy"] = content_security_policy(
-                request.headers.get("host", "127.0.0.1")
+                request.headers.get("host", "127.0.0.1"), desktop=desktop
             )
             response.headers["X-Content-Type-Options"] = "nosniff"
             response.headers["Referrer-Policy"] = "no-referrer"
