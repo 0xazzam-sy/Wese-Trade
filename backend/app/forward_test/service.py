@@ -324,6 +324,20 @@ class ForwardTestService:
         self.stats["last_evaluation_at"] = int(self.clock())
         stream.current = ev
         stream.tracker.on_evaluation(ev, analyzer.series.last)
+        # observability only (not part of the frozen strategy)
+        logger.info(
+            "forward_test.evaluated",
+            extra={
+                "fields": {
+                    "symbol": stream.key[0],
+                    "timeframe": stream.key[1].value,
+                    "close": close,
+                    "class": ev.signal_class.value,
+                    "score": round(ev.score, 1),
+                    "reason": ev.neutral_reason,
+                }
+            },
+        )
         self._publish(stream.key, EventType.SIGNAL_UPDATED, {"evaluation": evaluation_payload(ev)})
 
     # --- signal events ----------------------------------------------------------------------------
