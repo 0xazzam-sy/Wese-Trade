@@ -285,3 +285,38 @@ The browser workflow (`scripts/dev.sh`) is unchanged.
 | News / weather unavailable           | The source is unreachable. The last cached headlines stay visible. Signals are never affected      |
 | App already running                  | Only one instance is allowed. Launching again focuses the existing window                          |
 | Reset everything                     | Quit the app, then move the data root (§2) elsewhere. A new run starts on the next launch          |
+
+## 12. Validation results (2026-10-05)
+
+Real installs, not mocks:
+
+- **GitHub Actions run** [37297520784](https://github.com/0xazzam-sy/Wese-Trade/actions/runs/37297520784)
+  (`desktop.yml`): ✅ both jobs green.
+- **Local Linux:** the app ran under Xvfb in this build environment.
+
+| Check                                                          | Windows x64 (windows-latest)                                                             | macOS arm64 (macos-14)                       | Linux (local, Xvfb)              |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------- | -------------------------------- |
+| Sidecar build + self-test (no Python)                          | ✅                                                                                       | ✅                                           | ✅                               |
+| Installer / bundle                                             | ✅ `Wese Trade_1.0.0_x64-setup.exe` (22.2 MB), `.msi` (26.4 MB); silent per-user install | ✅ `Wese Trade.app` + `.dmg`                 | n/a (dev build)                  |
+| Launch with no Python/Node on PATH                             | ✅                                                                                       | ✅                                           | ✅                               |
+| Backend auto-start, dynamic loopback port, health              | ✅ (e.g. 61313, 61570)                                                                   | ✅                                           | ✅                               |
+| React rendered inside the webview                              | ✅                                                                                       | ✅                                           | ✅                               |
+| First-run admin from the app                                   | ✅ 201                                                                                   | ✅                                           | ✅                               |
+| Native app-data path                                           | ✅ `C:\Users\runneradmin\AppData\Local\WeseTrade`                                        | ✅ `~/Library/Application Support/WeseTrade` | ✅ (override)                    |
+| Forward-test run created at launch time                        | ✅ (not backdated)                                                                       | ✅                                           | ✅                               |
+| Relaunch: same DB, same user, same run, no duplicate           | ✅                                                                                       | ✅                                           | ✅                               |
+| Graceful backend stop (exit 0) + no orphan                     | ✅                                                                                       | ✅                                           | ✅                               |
+| Offline startup (OKX unreachable)                              | ✅                                                                                       | ✅                                           | ✅                               |
+| Crash → crash page → service restart                           | ✅ (`http://tauri.localhost/index.html`)                                                 | ✅                                           | ✅                               |
+| Non-ASCII path with spaces (`…\wese offline\مستخدم\WeseTrade`) | ✅                                                                                       | ✅                                           | ✅                               |
+| Shell SIGKILLed → sidecar exits by itself                      | —                                                                                        | —                                            | ✅ (~3 s, `desktop.parent_gone`) |
+| Second instance → focuses the first, one backend               | —                                                                                        | —                                            | ✅                               |
+| Logs: desktop / backend / forward-test / stderr                | ✅                                                                                       | ✅                                           | ✅                               |
+
+**Not yet validated:**
+
+- **Signed builds.** No certificates exist yet (§9).
+- **A real update.** No signed release has been published yet (§7).
+- **Network-recovery reconnect inside the packaged app.** The OKX reconnect and gap-recovery
+  logic is covered by the backend suites and was not re-run against a live network drop.
+- **Intel macOS.** Not built.
