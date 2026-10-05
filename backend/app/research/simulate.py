@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import asdict, dataclass, field, replace
 from typing import Any
 
@@ -184,8 +184,12 @@ def eligible(v: Variant, h: HypRecord) -> bool:
 
 
 def select(v: Variant, trig: TriggerRecord) -> tuple[Pick | None, Pick | None]:
+    return select_hyps(v, trig.hyps)
+
+
+def select_hyps(v: Variant, hyps: Sequence[HypRecord]) -> tuple[Pick | None, Pick | None]:
     best: dict[str, Pick | None] = {"long": None, "short": None}
-    for h in trig.hyps:
+    for h in hyps:
         if not eligible(v, h):
             continue
         sc = v.score.score(h.hyp)
@@ -229,37 +233,62 @@ def retrace_plan(plan: TradePlan, bar: Bar, tick: float, cfg: SignalConfig) -> T
     )
 
 
-def evaluation(v: Variant, series: SeriesResearch, trig: TriggerRecord) -> SignalEvaluation | None:
-    bull, bear = select(v, trig)
-    if trig.gated is not None or (bull is None and bear is None):
-        return None
+# Neutral reasons of the core evaluation (Arabic, shown in the UI by the forward test).
+REASON_GATED = "gated"
+REASON_NO_SETUP = "لا يوجد إعداد يستوفي شروط الاستراتيجية"
+REASON_WEAK = "قوة الإشارة أقل من حد الاستراتيجية"
+REASON_CONFLICT = "أدلة متعارضة بين الشراء والبيع"
+REASON_PLAN = "تعذّر بناء خطة صفقة منطقية"
+
+
+def evaluate_hyps(
+    v: Variant,
+    *,
+    symbol: str,
+    timeframe: str,
+    tick: float,
+    bar: Bar,
+    candle_time: int | None,
+    hyps: Sequence[HypRecord],
+    gated: str | None,
+    strategy_version: str | None = None,
+) -> tuple[SignalEvaluation | None, str, Pick | None]:
+    """The ONE variant selection rule, shared by research pass 2 and the live forward test.
+
+    Returns (directional evaluation or None, neutral reason when None, the best pick)."""
+    if gated is not None:
+        return None, REASON_GATED, None
+    bull, bear = select_hyps(v, hyps)
+    if bull is None and bear is None:
+        return None, REASON_NO_SETUP, None
     bull_s = bull.score if bull else 0.0
     bear_s = bear.score if bear else 0.0
     chosen = bull if bull is not None and (bear is None or bull_s >= bear_s) else bear
     if chosen is None:  # pragma: no cover - excluded above
-        return None
+        return None, REASON_NO_SETUP, None
     top, other = max(bull_s, bear_s), min(bull_s, bear_s)
-    if top < v.threshold or top - other < v.spread:
-        return None
+    if top < v.threshold:
+        return None, REASON_WEAK, chosen
+    if top - other < v.spread:
+        return None, REASON_CONFLICT, chosen
     plan = chosen.record.plans.get(v.plan_key())
     if not isinstance(plan, TradePlan):
-        return None
+        return None, REASON_PLAN, chosen
     if v.entry == "retrace":
-        plan = retrace_plan(plan, series.bars[trig.index], series.tick, DEFAULT_SIGNAL_CONFIG)
+        plan = retrace_plan(plan, bar, tick, DEFAULT_SIGNAL_CONFIG)
     side = Side(chosen.record.side)
     rescored = v.score.weights is not None
     hyp = (
         replace(chosen.record.hyp, score=round(chosen.score, 2)) if rescored else chosen.record.hyp
     )
-    score = hyp.score
-    return SignalEvaluation(
-        symbol=series.symbol,
-        timeframe=series.timeframe,
-        candle_time=trig.baseline.candle_time,
+    ev = SignalEvaluation(
+        symbol=symbol,
+        timeframe=timeframe,
+        candle_time=candle_time,
         developing=False,
         signal_class=SignalClass.BUY if side is Side.LONG else SignalClass.SELL,
         side=side,
-        score=score,
+        score=hyp.score,
         bull_score=bull_s,
         bear_score=bear_s,
         hypothesis=hyp,
@@ -267,9 +296,24 @@ def evaluation(v: Variant, series: SeriesResearch, trig: TriggerRecord) -> Signa
         best_bear=bear.record.hyp if bear else None,
         plan=plan,
         neutral_reason=None,
-        strategy_version=v.version,
+        strategy_version=strategy_version or v.version,
         evidence={"features": chosen.record.features},
     )
+    return ev, "", chosen
+
+
+def evaluation(v: Variant, series: SeriesResearch, trig: TriggerRecord) -> SignalEvaluation | None:
+    ev, _reason, _pick = evaluate_hyps(
+        v,
+        symbol=series.symbol,
+        timeframe=series.timeframe,
+        tick=series.tick,
+        bar=series.bars[trig.index],
+        candle_time=trig.baseline.candle_time,
+        hyps=trig.hyps,
+        gated=trig.gated,
+    )
+    return ev
 
 
 def run(v: Variant, series: SeriesResearch) -> list[Signal]:

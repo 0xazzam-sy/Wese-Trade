@@ -76,6 +76,16 @@ class SignalTracker:
     def remember(self, ids: set[str]) -> None:
         self._seen |= ids
 
+    def restore(self, signals: list[Signal]) -> None:
+        """Rebuild state after a restart from persisted signals of this stream (oldest
+        first): seen ids (dedupe), last confirmation per side (cooldown) and the open
+        signal. Behaviour afterwards is identical to an uninterrupted tracker."""
+        for s in signals:
+            self._seen.add(s.id)
+            self._last_confirmed[s.side] = (s.confirmed_time, s.signal_class)
+            if not s.state.is_final:
+                self.active = s
+
     # --- confirmation --------------------------------------------------------------------------
     def on_evaluation(self, ev: SignalEvaluation, bar: Bar) -> Signal | None:
         if ev.developing or not ev.is_trade or ev.hypothesis is None or ev.plan is None:

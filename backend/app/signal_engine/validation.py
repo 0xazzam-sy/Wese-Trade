@@ -78,6 +78,8 @@ class StrategyDeployment:
     # Families kept in the engine (still evaluated, visible in details) but never emitted
     # as directional signals: EXPERIMENTAL / DISABLED_FOR_SIGNALS (docs/research.md).
     disabled_families: frozenset[str] = frozenset()
+    # Reason shown when a directional evaluation is downgraded on a non-signal timeframe.
+    inactive_reason: str = ""
 
     def signal_capable(self, timeframe: str) -> bool:
         return self.status is not ValidationStatus.REJECTED and timeframe in self.signal_timeframes
@@ -88,7 +90,7 @@ class StrategyDeployment:
         if ev.signal_class is SignalClass.NEUTRAL:
             return ev
         if not self.signal_capable(ev.timeframe):
-            reason = RESEARCH_ONLY_REASON
+            reason = self.inactive_reason or RESEARCH_ONLY_REASON
         elif ev.hypothesis is not None and ev.hypothesis.family.value in self.disabled_families:
             reason = DISABLED_FAMILY_REASON
         else:
@@ -104,6 +106,16 @@ class StrategyDeployment:
             "forward_test": self.status is ValidationStatus.FORWARD_TEST,
             "signal_capable": self.signal_capable(timeframe),
             "note_ar": self.note_ar,
+            "fingerprint": None,
+            "name": None,
+            "score_calibrated": False,
+            "scope_note_ar": None
+            if self.signal_capable(timeframe)
+            else (
+                TIMEFRAME_INACTIVE_AR
+                if timeframe in RESEARCH_ONLY_TIMEFRAMES
+                else SYMBOL_INACTIVE_AR
+            ),
         }
 
 
@@ -124,7 +136,22 @@ PHASE4_BASELINE = StrategyDeployment(
     disabled_families=frozenset({"LIQUIDITY_REVERSAL", "BREAKOUT_CONTINUATION"}),
 )
 
-ACTIVE_DEPLOYMENT = PHASE4_BASELINE
+RESEARCH_ONLY_TIMEFRAMES = frozenset({"1m", "5m", "10m"})
+TIMEFRAME_INACTIVE_AR = "هذا الفريم غير مفعّل للإشارات حالياً"
+BASELINE_INACTIVE_AR = (
+    "الإشارات الاتجاهية تصدر فقط من استراتيجية الاختبار المباشر لرموز وفريمات محددة"
+)
+SYMBOL_INACTIVE_AR = "هذا الرمز أو الفريم خارج نطاق الاختبار المباشر — لا إشارات اتجاهية"
+
+# Phase 4.2: directional signals come ONLY from the frozen forward-test candidate
+# (app.forward_test) on its universe x 15m/30m/1h. The unproven baseline keeps evaluating
+# everywhere else for transparency, but never emits BUY/SELL.
+ACTIVE_DEPLOYMENT = replace(
+    PHASE4_BASELINE,
+    signal_timeframes=frozenset(),
+    note_ar="الاستراتيجية الأساسية غير مُثبتة — لا تُصدر إشارات اتجاهية.",
+    inactive_reason=BASELINE_INACTIVE_AR,
+)
 
 
 @dataclass(frozen=True, slots=True)

@@ -16,6 +16,7 @@ from app.core.config import API_V1_PREFIX, BACKEND_DIR, Settings, get_settings
 from app.core.logging import configure_logging, get_logger
 from app.core.state import AppResources
 from app.db.session import Database
+from app.forward_test.service import ForwardTestService
 from app.market_data.factory import build_market_engine
 from app.signal_engine.service import SignalService
 from app.websocket.events import CLOSE_SERVER_SHUTDOWN
@@ -36,6 +37,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if market is not None
         else None
     )
+    signals = (
+        SignalService(analysis, market, database)
+        if analysis is not None and market is not None
+        else None
+    )
+    forward_test = (
+        ForwardTestService(analysis, market, database)
+        if analysis is not None and market is not None
+        else None
+    )
+    if signals is not None and forward_test is not None:
+        signals.excluded = forward_test.owns
+        signals.delegate = forward_test
     resources = AppResources(
         settings=settings,
         database=database,
@@ -43,11 +57,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         connections=connections,
         market=market,
         analysis=analysis,
-        signals=(
-            SignalService(analysis, market, database)
-            if analysis is not None and market is not None
-            else None
-        ),
+        signals=signals,
+        forward_test=forward_test,
     )
 
     @asynccontextmanager
@@ -73,7 +84,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await resources.analysis.start()
         if resources.signals is not None:
             await resources.signals.start()
+        if resources.forward_test is not None:
+            await resources.forward_test.start()
         yield
+        if resources.forward_test is not None:
+            await resources.forward_test.stop()
         if resources.signals is not None:
             await resources.signals.stop()
         if resources.analysis is not None:

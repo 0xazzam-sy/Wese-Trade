@@ -88,6 +88,31 @@ export const STRATEGY: StrategyInfo = {
   note_ar: 'استراتيجية تجريبية لم تُثبت أفضلية تاريخية بعد التكاليف — ليست توصية.',
 };
 
+export const FORWARD_STRATEGY: StrategyInfo = {
+  version: 'wese-trade-forward-4.2-a03e20f1d4',
+  status: 'forward_testing',
+  status_ar: 'اختبار مباشر',
+  label_ar: 'اختبار مباشر',
+  forward_test: true,
+  signal_capable: true,
+  note_ar: 'الإشارات قيد الاختبار وليست توصيات مضمونة.',
+  fingerprint: '4.2-a03e20f',
+  name: 'Wese Trade Forward 4.2',
+  score_calibrated: false,
+  scope_note_ar: null,
+};
+
+/** Wording the product must never use for signals. */
+export const FORBIDDEN_WORDS = [
+  'موثوق',
+  'مضمون ',
+  'دقة عالية مضمونة',
+  'نسبة نجاح',
+  'احترافي مثبت',
+  'عالي الدقة',
+  'شبه مضمون',
+];
+
 export function view(overrides: Partial<SignalView> = {}): SignalView {
   return {
     symbol: 'BTCUSDT',

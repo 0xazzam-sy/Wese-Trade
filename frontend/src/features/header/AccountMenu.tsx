@@ -1,4 +1,4 @@
-import { ChartNoAxesColumn, ChevronDown, LogOut, UserRound } from 'lucide-react';
+import { ChartNoAxesColumn, ChevronDown, FlaskConical, LogOut, UserRound } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 
@@ -80,6 +80,20 @@ export function AccountMenu() {
             >
               <ChartNoAxesColumn className="size-4" />
               الاختبار التاريخي
+            </button>
+          )}
+          {(user.role === 'admin' || user.role === 'analyst') && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                void navigate('/forward-test');
+              }}
+              className="hover:bg-sunken flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm"
+            >
+              <FlaskConical className="size-4" />
+              الاختبار المباشر
             </button>
           )}
           <button

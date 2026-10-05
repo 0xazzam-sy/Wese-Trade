@@ -18,8 +18,9 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Protocol
 
 from app.analysis.engine import MarketAnalyzer
 from app.analysis.multi_timeframe.context import context_timeframes
@@ -60,6 +61,14 @@ class _Stream:
     recent: list[Signal] = field(default_factory=list)
 
 
+class StreamOwner(Protocol):
+    """Another publisher that owns some streams (the Phase 4.2 forward test)."""
+
+    def subscribe(self, consumer: str, key: AppKey) -> None: ...
+
+    def state(self, key: AppKey) -> dict[str, Any]: ...
+
+
 class SignalService:
     def __init__(
         self,
@@ -71,6 +80,9 @@ class SignalService:
     ) -> None:
         self.analysis = analysis
         self.deployment = deployment
+        # Streams owned by another publisher (the forward test): never published here.
+        self.excluded: Callable[[AppKey], bool] = lambda _key: False
+        self.delegate: StreamOwner | None = None
         self.market = market
         self.database = database
         self.config = config
@@ -101,6 +113,10 @@ class SignalService:
     # --- subscriptions (browser) ---------------------------------------------------------
     def subscribe(self, consumer: str, key: AppKey) -> None:
         """Send the current signal state of an execution stream to a new subscriber."""
+        if self.excluded(key):
+            if self.delegate is not None:
+                self.delegate.subscribe(consumer, key)
+            return
         stream = self.streams.get(key)
         if stream is not None:
             self.market.publisher.send_to([consumer], self._state_event(stream))
@@ -132,7 +148,7 @@ class SignalService:
         self._try_seed(stream)
 
     def on_closed(self, key: AppKey, analyzer: MarketAnalyzer) -> None:
-        if self.analysis.consumers(key):
+        if self.analysis.consumers(key) and not self.excluded(key):
             stream = self._stream(key)
             stream.tracker.on_bar(analyzer.series.last)
             stream.pending_close = analyzer.series.last.close_time
@@ -301,7 +317,7 @@ class SignalService:
 
     def _publish(self, stream: _Stream, event: EventType, data: dict[str, Any]) -> None:
         consumers = self.analysis.consumers(stream.key)
-        if consumers:
+        if consumers and not self.excluded(stream.key):
             payload = {
                 "symbol": stream.key[0],
                 "timeframe": stream.key[1].value,
@@ -354,6 +370,8 @@ class SignalService:
 
     # --- REST ---------------------------------------------------------------------------------
     async def current(self, key: AppKey) -> dict[str, Any]:
+        if self.excluded(key) and self.delegate is not None:
+            return self.delegate.state(key)
         if key in self.streams and self.streams[key].current is not None:
             return self.state(key)
         analyzer, _forming, frames = await self.analysis.on_demand(key)

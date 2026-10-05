@@ -21,6 +21,7 @@ from app.signal_engine.enums import SignalClass, SignalState
 from app.signal_engine.lifecycle import SignalTracker
 from app.signal_engine.models import Signal
 from app.signal_engine.service import SignalService
+from app.signal_engine.validation import PHASE4_BASELINE
 from tests.analysis.helpers import load_fixture
 from tests.conftest import ADMIN_PASSWORD, ADMIN_USERNAME
 from tests.market.fakes import FakeProvider, FakePublisher
@@ -180,7 +181,7 @@ async def test_seed_evaluation_is_display_only_and_withholds_trades(
     engine = MarketDataEngine(provider, publisher)
     await engine.symbols.refresh()
     analysis = AnalysisService(engine, loop_interval=0.01)
-    signals = SignalService(analysis, engine, None)
+    signals = SignalService(analysis, engine, None, deployment=PHASE4_BASELINE)
     await engine.subscribe("c1", "BTCUSDT", Timeframe.M5)
     await analysis.subscribe("c1", "BTCUSDT", Timeframe.M5)
     key = ("BTCUSDT", Timeframe.M5)

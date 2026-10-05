@@ -121,11 +121,12 @@ function PlanCell({
 /** Validation status of the strategy: never lets a signal look "proven" when it is not. */
 function StrategyBadge({ strategy }: { strategy: StrategyInfo }) {
   const forward = strategy.forward_test;
+  const fp = strategy.fingerprint ? ` · ${strategy.fingerprint}` : '';
   return (
     <span
       data-testid="strategy-status"
       data-status={strategy.status}
-      title={`${strategy.status_ar} — ${strategy.note_ar} (${strategy.version})`}
+      title={`${strategy.status_ar} — ${strategy.note_ar} (${strategy.version}${fp})`}
       className={cn(
         'text-2xs ms-auto truncate rounded-md border px-1.5 py-0.5 font-medium',
         forward
@@ -138,10 +139,12 @@ function StrategyBadge({ strategy }: { strategy: StrategyInfo }) {
   );
 }
 
-function signalLabel(d: SignalDisplay): string {
+function signalLabel(d: SignalDisplay, forward: boolean): string {
   if (d.kind === 'none') return 'لا توجد إشارة حالياً';
   const name = SIGNAL_CLASS_AR[d.signalClass];
-  return d.kind === 'developing' ? `${name} — قيد التشكّل` : name;
+  if (d.kind === 'developing') return `${name} — قيد التشكّل`;
+  // A forward-test BUY/SELL always carries its status: never a trusted recommendation.
+  return forward && d.signalClass !== 'NEUTRAL' ? `${name} — اختبار مباشر` : name;
 }
 
 function stateLine(d: SignalDisplay): string | null {
@@ -279,13 +282,27 @@ export function SignalPanel() {
               developing && 'animate-pulse border-dashed border-warning/60',
             )}
           >
-            {signalLabel(display)}
+            {signalLabel(
+              display,
+              strategy?.forward_test === true || Boolean(strategy?.fingerprint),
+            )}
           </div>
           <div>
             <div className="text-fg-subtle text-2xs mb-1 flex items-center justify-between">
               <span>قوة الإشارة</span>
-              <span className="ns-num" data-testid="signal-score">
-                {formatScore(display.score)}
+              <span className="flex items-center gap-1.5">
+                <span className="ns-num" data-testid="signal-score">
+                  {formatScore(display.score)}
+                </span>
+                {strategy?.score_calibrated === false && (
+                  <span
+                    data-testid="score-uncalibrated"
+                    title="درجة توافق غير معايرة — ليست احتمالية نجاح"
+                    className="text-fg-subtle/80"
+                  >
+                    غير معايرة
+                  </span>
+                )}
               </span>
             </div>
             <div
@@ -316,7 +333,12 @@ export function SignalPanel() {
           )}
           {strategy && !strategy.signal_capable && (
             <p className="text-warning text-2xs" data-testid="research-only">
-              إطار للبحث فقط — لا إشارات اتجاهية
+              {strategy.scope_note_ar ?? 'هذا الفريم غير مفعّل للإشارات حالياً'}
+            </p>
+          )}
+          {strategy?.fingerprint && (
+            <p className="text-fg-subtle text-2xs ns-ltr" data-testid="strategy-fingerprint">
+              {strategy.fingerprint}
             </p>
           )}
         </div>
@@ -347,7 +369,7 @@ export function SignalPanel() {
       <p className="text-fg-subtle text-2xs mt-2 flex items-center gap-1.5">
         <Info className="size-3" />
         {RISK_NOTE} قوة الإشارة درجة توافق شروط الاستراتيجية، وليست احتمالية نجاح الصفقة.
-        {strategy && !strategy.forward_test && ` ${strategy.note_ar}`}
+        {strategy && <span data-testid="strategy-note"> {strategy.note_ar}</span>}
       </p>
       {import.meta.env.DEV && debugOpen && <AnalysisDebug snapshot={snapshot} />}
     </section>

@@ -1,4 +1,5 @@
 import { ChartWorkspace } from '@/features/charts/components/ChartWorkspace';
+import { ForwardTestCard } from '@/features/forwardTest/ForwardTestCard';
 import { NewsPanel } from '@/features/news/NewsPanel';
 import { MarketOverview } from '@/features/markets/MarketOverview';
 import { SignalPanel } from '@/features/signals/SignalPanel';
@@ -14,6 +15,7 @@ export function DashboardPage() {
     <div className="grid h-full grid-cols-[272px_minmax(0,1fr)_264px] gap-3 p-3 2xl:grid-cols-[340px_minmax(0,1fr)_320px]">
       <div className="flex min-h-0 flex-col gap-3">
         <SystemIdentity />
+        <ForwardTestCard />
         <NewsPanel />
       </div>
 

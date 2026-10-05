@@ -12,45 +12,16 @@ the apparent improvement survives an honest selection procedure.
 from __future__ import annotations
 
 import argparse
-import itertools
 import json
 import time
 from typing import Any
 
 from app.research import studies as st
 from app.research import universe
-from app.research.simulate import Variant
+from app.research.candidates import grid
 from app.research.store import RESEARCH_DIR
 from app.research.walkforward import Window
-from app.scripts.run_research import SCOPES, TREND, WEAK_REGIMES, walk_forward_selection
-
-
-def grid() -> list[Variant]:
-    out = []
-    for entry, runner, filt, thr, regimes in itertools.product(
-        ("base", "retrace"),
-        (False, True),
-        ((), ("not_extended",)),
-        (70.0, 75.0, 80.0),
-        ((), WEAK_REGIMES),
-    ):
-        name = (
-            f"refine:trend|{entry}|{'runner' if runner else 'tpA'}|"
-            f"{'not_ext' if filt else 'nofilter'}|t{int(thr)}|{'noweak' if regimes else 'allreg'}"
-        )
-        out.append(
-            Variant(
-                name,
-                families=TREND,
-                entry=entry,
-                runner=runner,
-                filters=filt,
-                threshold=thr,
-                excluded_regimes=regimes,
-                notes="exploratory post-hoc refinement grid",
-            )
-        )
-    return out
+from app.scripts.run_research import SCOPES, walk_forward_selection
 
 
 def main(name: str, workers: int) -> None:

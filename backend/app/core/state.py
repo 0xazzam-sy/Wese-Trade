@@ -8,6 +8,7 @@ from app.analysis.service import AnalysisService
 from app.auth.rate_limit import LoginRateLimiter
 from app.core.config import Settings
 from app.db.session import Database
+from app.forward_test.service import ForwardTestService
 from app.market_data.engine import MarketDataEngine
 from app.signal_engine.service import SignalService
 from app.websocket.manager import ConnectionManager
@@ -22,3 +23,4 @@ class AppResources:
     market: MarketDataEngine | None = None
     analysis: AnalysisService | None = None
     signals: SignalService | None = None
+    forward_test: ForwardTestService | None = None

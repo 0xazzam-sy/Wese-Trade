@@ -5,7 +5,15 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { useAnalysisStore } from '@/stores/analysisStore';
 import { notReady, readySnapshot } from '@/test/analysisFixture';
-import { evaluation, PLAN, signal, STRATEGY, view } from '@/test/signalFixture';
+import {
+  evaluation,
+  FORBIDDEN_WORDS,
+  FORWARD_STRATEGY,
+  PLAN,
+  signal,
+  STRATEGY,
+  view,
+} from '@/test/signalFixture';
 import type { SignalView } from '@/types/signal';
 
 import { SignalPanel } from './SignalPanel';
@@ -213,12 +221,49 @@ describe('SignalPanel (analysis)', () => {
     expect(badge).toHaveAttribute('data-status', 'forward_test');
   });
 
-  it('marks research-only timeframes', () => {
+  it('marks research-only timeframes as not enabled for signals', () => {
     render(<SignalPanel />);
     setPrimary(readySnapshot());
     setSignal(view({ strategy: { ...STRATEGY, signal_capable: false }, evaluation: evaluation() }));
-    expect(screen.getByTestId('research-only')).toHaveTextContent('إطار للبحث فقط');
+    expect(screen.getByTestId('research-only')).toHaveTextContent(
+      'هذا الفريم غير مفعّل للإشارات حالياً',
+    );
     expect(screen.getByTestId('signal-badge')).toHaveTextContent('محايد');
+  });
+
+  it('labels a forward-test BUY, shows the fingerprint and an uncalibrated score', () => {
+    render(<SignalPanel />);
+    setPrimary(readySnapshot());
+    setSignal(view({ strategy: FORWARD_STRATEGY, active: signal() }));
+    expect(screen.getByTestId('signal-badge')).toHaveTextContent('شراء — اختبار مباشر');
+    expect(screen.getByTestId('strategy-status')).toHaveTextContent('اختبار مباشر');
+    expect(screen.getByTestId('strategy-fingerprint')).toHaveTextContent('4.2-a03e20f');
+    expect(screen.getByTestId('score-uncalibrated')).toHaveTextContent('غير معايرة');
+    expect(screen.getByTestId('strategy-note')).toHaveTextContent(
+      'الإشارات قيد الاختبار وليست توصيات مضمونة.',
+    );
+    const text = screen.getByLabelText('لوحة التحليل').textContent;
+    for (const word of FORBIDDEN_WORDS) expect(text).not.toContain(word);
+  });
+
+  it('shows the forward-test scope note on 1m/5m/10m', () => {
+    render(<SignalPanel />);
+    setPrimary(readySnapshot());
+    setSignal(
+      view({
+        timeframe: '5m',
+        strategy: {
+          ...FORWARD_STRATEGY,
+          signal_capable: false,
+          scope_note_ar: 'هذا الفريم غير مفعّل للإشارات حالياً',
+        },
+        evaluation: evaluation(),
+      }),
+    );
+    expect(screen.getByTestId('research-only')).toHaveTextContent(
+      'هذا الفريم غير مفعّل للإشارات حالياً',
+    );
+    expect(screen.getByTestId('signal-badge')).not.toHaveTextContent('شراء');
   });
 
   it('switches between the primary and secondary chart analysis', () => {

@@ -114,7 +114,16 @@ export interface SignalDTO {
 }
 
 export type ValidationStatus =
-  'unproven' | 'testing' | 'passed_historical' | 'forward_test' | 'rejected';
+  | 'unproven'
+  | 'testing'
+  | 'passed_historical'
+  | 'forward_test'
+  | 'rejected'
+  | 'forward_testing'
+  | 'paused'
+  | 'stopped'
+  | 'passed_forward_test'
+  | 'failed_forward_test';
 
 /** Validation status of the strategy version behind the signals (backend deployment). */
 export interface StrategyInfo {
@@ -126,6 +135,13 @@ export interface StrategyInfo {
   /** False = research-only timeframe: the engine evaluates but never emits BUY/SELL. */
   signal_capable: boolean;
   note_ar: string;
+  /** Short strategy fingerprint, e.g. "4.2-a03e20f" (forward test only). */
+  fingerprint?: string | null;
+  name?: string | null;
+  /** The signal-strength score is NOT calibrated: never a probability. */
+  score_calibrated?: boolean;
+  /** Why this symbol/timeframe shows no directional signals. */
+  scope_note_ar?: string | null;
 }
 
 /** Per-stream signal view: what the panel and chart overlays display. */

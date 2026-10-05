@@ -4,6 +4,7 @@ import { ProtectedRoute } from '@/features/auth/ProtectedRoute';
 import { AppShell } from '@/layouts/AppShell';
 import { BacktestsPage } from '@/pages/BacktestsPage';
 import { DashboardPage } from '@/pages/DashboardPage';
+import { ForwardTestPage } from '@/pages/ForwardTestPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 
@@ -18,7 +19,10 @@ export const router = createBrowserRouter([
           { index: true, element: <DashboardPage /> },
           {
             element: <ProtectedRoute roles={['admin', 'analyst']} />,
-            children: [{ path: 'backtests', element: <BacktestsPage /> }],
+            children: [
+              { path: 'backtests', element: <BacktestsPage /> },
+              { path: 'forward-test', element: <ForwardTestPage /> },
+            ],
           },
         ],
       },
