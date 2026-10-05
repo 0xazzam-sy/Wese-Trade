@@ -19,6 +19,8 @@ interface AuthState {
   /** Restore the session from the httpOnly cookie (called once at startup). */
   initialize: () => Promise<void>;
   login: (credentials: LoginCredentials) => Promise<LoginError | null>;
+  /** First run: create the first administrator and sign in (returns the error, if any). */
+  setup: (credentials: LoginCredentials) => Promise<unknown>;
   logout: () => Promise<void>;
   /** Server reported the session is no longer valid. */
   sessionExpired: () => void;
@@ -59,6 +61,16 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       return null;
     } catch (error) {
       return toLoginError(error);
+    }
+  },
+
+  async setup(credentials) {
+    try {
+      const { user } = await authApi.setup(credentials);
+      set({ status: 'authenticated', user });
+      return null;
+    } catch (error) {
+      return error;
     }
   },
 

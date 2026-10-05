@@ -156,3 +156,61 @@ async def test_ensure_run_excludes_inactive_symbols(tmp_path: Path) -> None:
 def test_desktop_never_binds_beyond_loopback(tmp_path: Path, host: str) -> None:
     with pytest.raises(ValueError, match="loopback"):
         _desktop_settings(tmp_path, app_host=host)
+
+
+WS_URL = "ws://127.0.0.1:47123/api/v1/ws"  # TestClient ignores base_url for websockets
+
+
+def _desktop_app(tmp_path: Path) -> object:
+    from fastapi.testclient import TestClient
+
+    app = create_app(_desktop_settings(tmp_path, web_dir=_web(tmp_path)))
+    return TestClient(app, base_url="http://127.0.0.1:47123")
+
+
+def test_dns_rebinding_hosts_are_rejected(tmp_path: Path) -> None:
+    from starlette.websockets import WebSocketDisconnect
+
+    with _desktop_app(tmp_path) as client:  # type: ignore[attr-defined]
+        assert client.get("/api/v1/health").status_code == 200
+        rebound = client.get("/api/v1/auth/setup", headers={"host": "evil.example:47123"})
+        assert rebound.status_code == 400
+        with (
+            pytest.raises(WebSocketDisconnect),
+            client.websocket_connect(
+                "ws://evil.example:47123/api/v1/ws",
+                headers={"origin": "http://evil.example:47123"},
+            ),
+        ):
+            pass
+
+
+@pytest.mark.parametrize(
+    ("origin", "accepted"),
+    [
+        ("http://127.0.0.1:47123", True),  # the page this server serves
+        ("http://localhost:47123", True),
+        ("http://127.0.0.1:9999", False),  # another local port
+        ("https://evil.example", False),
+        ("null", False),
+    ],
+)
+def test_ws_accepts_only_its_own_loopback_origin(
+    tmp_path: Path, origin: str, accepted: bool
+) -> None:
+    from starlette.websockets import WebSocketDisconnect
+
+    with _desktop_app(tmp_path) as client:  # type: ignore[attr-defined]
+        if accepted:
+            with (
+                client.websocket_connect(WS_URL, headers={"origin": origin}) as ws,
+                pytest.raises(WebSocketDisconnect) as exc,
+            ):
+                ws.receive_json()  # accepted, then closed: no session cookie
+            assert exc.value.code == 4401
+        else:
+            with (
+                pytest.raises(WebSocketDisconnect),
+                client.websocket_connect(WS_URL, headers={"origin": origin}),
+            ):
+                pass

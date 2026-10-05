@@ -1,4 +1,11 @@
-import { ChartNoAxesColumn, ChevronDown, FlaskConical, LogOut, UserRound } from 'lucide-react';
+import {
+  ChartNoAxesColumn,
+  ChevronDown,
+  FlaskConical,
+  LogOut,
+  Settings,
+  UserRound,
+} from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 
@@ -96,6 +103,18 @@ export function AccountMenu() {
               الاختبار المباشر
             </button>
           )}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              void navigate('/settings');
+            }}
+            className="hover:bg-sunken flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm"
+          >
+            <Settings className="size-4" />
+            الإعدادات
+          </button>
           <button
             type="button"
             role="menuitem"

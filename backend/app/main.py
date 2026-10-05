@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app import __version__
 from app.analysis.service import AnalysisService
@@ -132,6 +133,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Accept"],
     )
+    if settings.is_desktop:
+        # Loopback names only: defeats DNS-rebinding against the local service.
+        app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost"])
     app.include_router(api_router, prefix=API_V1_PREFIX)
     if settings.web_dir is not None:
         mount_web(app, settings.web_dir)

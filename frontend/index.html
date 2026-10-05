@@ -7,14 +7,7 @@
     <meta name="description" content="Wese Trade — منصة تحليل أسواق الكريبتو" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Wese Trade</title>
-    <script>
-      // Apply the persisted theme before first paint to avoid a flash of the wrong theme.
-      try {
-        var stored = JSON.parse(localStorage.getItem('wesetrade.theme') || 'null');
-        var theme = stored && stored.state && stored.state.theme;
-        if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
-      } catch (e) {}
-    </script>
+    <script src="/theme-init.js"></script>
   </head>
   <body>
     <div id="root"></div>

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
@@ -14,6 +15,7 @@ from pydantic import ValidationError
 from app.analysis.service import AnalysisService
 from app.api.deps import resolve_user_from_token
 from app.auth.tokens import ACCESS_COOKIE_NAME, InvalidTokenError, decode_access_token
+from app.core.config import Settings
 from app.core.logging import get_logger
 from app.core.state import AppResources
 from app.market_data.engine import MarketDataEngine
@@ -35,10 +37,25 @@ logger = get_logger(__name__)
 MAX_CLIENT_MESSAGE_BYTES = 4096
 
 
-def _origin_allowed(websocket: WebSocket, allowed: list[str]) -> bool:
+LOOPBACK_HOSTS = ("127.0.0.1", "localhost")
+
+
+def _origin_allowed(websocket: WebSocket, settings: Settings) -> bool:
     origin = websocket.headers.get("origin")
     # Non-browser clients send no Origin; they still need a valid auth cookie.
-    return origin is None or origin.rstrip("/") in allowed
+    if origin is None or origin.rstrip("/") in settings.frontend_origin:
+        return True
+    if settings.web_dir is None:
+        return False
+    # The UI is served by THIS server (desktop): accept only its own loopback origin.
+    # (Host headers are restricted to loopback names, so DNS rebinding cannot pass.)
+    parsed = urlsplit(origin)
+    return (
+        parsed.scheme == "http"
+        and parsed.hostname in LOOPBACK_HOSTS
+        and parsed.port is not None
+        and parsed.port == websocket.url.port
+    )
 
 
 async def _heartbeat(connection: ClientConnection, interval: float, expires_at: float) -> None:
@@ -86,7 +103,7 @@ async def realtime(websocket: WebSocket) -> None:
     resources: AppResources = websocket.app.state.resources
     settings = resources.settings
 
-    if not _origin_allowed(websocket, settings.frontend_origin):
+    if not _origin_allowed(websocket, settings):
         logger.warning(
             "ws.origin_rejected", extra={"fields": {"origin": websocket.headers.get("origin")}}
         )

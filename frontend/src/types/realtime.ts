@@ -19,7 +19,6 @@ export const EVENT_TYPES = {
   signalConfirmed: 'signal.confirmed',
   signalUpdated: 'signal.updated',
   signalClosed: 'signal.closed',
-  scannerUpdate: 'scanner.update',
 } as const;
 
 export type ConnectionState = 'connecting' | 'connected' | 'disconnected';

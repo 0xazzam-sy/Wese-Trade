@@ -15,14 +15,22 @@ import { searchSymbols } from './search';
 
 const ROW_HEIGHT = 34;
 
+const COMPACT = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
+
+/** 24h volume in the base asset exactly as OKX reports it (volCcy24h); never estimated. */
+function formatVolume(ticker: Ticker | undefined): string {
+  if (!ticker) return '--';
+  const value = Number(ticker.volume_24h);
+  return Number.isFinite(value) && value > 0 ? COMPACT.format(value) : '--';
+}
+
 interface Row {
   symbol: MarketSymbol;
   ticker: Ticker | undefined;
 }
 
 /**
- * Market overview (NOT a scanner): real OKX prices and 24h change only.
- * Signal and confidence columns stay "--" until the signal engine exists.
+ * Market overview (NOT a scanner): real OKX prices, 24h change and 24h base volume only.
  * Sorted by 24h turnover (base volume × last price) — a liquidity ordering, not a ranking.
  */
 export function MarketOverview() {
@@ -55,14 +63,6 @@ export function MarketOverview() {
       aria-label="نظرة على السوق"
       title="نظرة على السوق"
       icon={<LineChart className="size-4" />}
-      actions={
-        <span
-          className="bg-neutral-soft text-fg-subtle text-2xs rounded-full px-2 py-0.5"
-          title="الماسح غير مفعّل بعد"
-        >
-          بدون إشارات
-        </span>
-      }
       className="h-full"
       bodyClassName="flex flex-col"
     >
@@ -87,12 +87,13 @@ export function MarketOverview() {
         </p>
       </div>
 
-      <div className="border-line text-fg-subtle text-2xs grid grid-cols-[1.2fr_1.1fr_0.9fr_0.5fr_0.4fr] gap-1 border-b px-3 py-2 font-medium">
+      <div className="border-line text-fg-subtle text-2xs grid grid-cols-[1.1fr_1.1fr_0.8fr_0.9fr] gap-1 border-b px-3 py-2 font-medium">
         <span>الرمز</span>
         <span>السعر</span>
         <span>24س</span>
-        <span>الإشارة</span>
-        <span className="text-end">الثقة</span>
+        <span className="text-end" title="حجم التداول خلال 24 ساعة بوحدة العملة الأساسية (OKX)">
+          الحجم 24س
+        </span>
       </div>
 
       <div
@@ -133,7 +134,7 @@ export function MarketOverview() {
                   }}
                   title="عرض في الرسم الرئيسي"
                   className={cn(
-                    'hover:bg-surface-hover grid h-full w-full grid-cols-[1.2fr_1.1fr_0.9fr_0.5fr_0.4fr] items-center gap-1 px-3 text-start',
+                    'hover:bg-surface-hover grid h-full w-full grid-cols-[1.1fr_1.1fr_0.8fr_0.9fr] items-center gap-1 px-3 text-start',
                     symbol.symbol === selected && 'bg-accent-soft',
                   )}
                 >
@@ -153,8 +154,9 @@ export function MarketOverview() {
                   >
                     {formatPercent(pct)}
                   </span>
-                  <span className="ns-num text-fg-subtle text-xs">--</span>
-                  <span className="ns-num text-fg-subtle text-end text-xs">--</span>
+                  <span className="ns-num text-fg-subtle text-end text-xs">
+                    {formatVolume(ticker)}
+                  </span>
                 </button>
               );
             }}

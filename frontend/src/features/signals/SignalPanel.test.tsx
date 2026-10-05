@@ -14,7 +14,7 @@ import {
   STRATEGY,
   view,
 } from '@/test/signalFixture';
-import type { SignalView } from '@/types/signal';
+import type { SignalView, TradePlanDTO } from '@/types/signal';
 
 import { SignalPanel } from './SignalPanel';
 
@@ -244,6 +244,49 @@ describe('SignalPanel (analysis)', () => {
     );
     const text = screen.getByLabelText('لوحة التحليل').textContent;
     for (const word of FORBIDDEN_WORDS) expect(text).not.toContain(word);
+  });
+
+  it('renders a forward-test SELL with its frozen short plan (values from the real ETH fixture)', () => {
+    render(<SignalPanel />);
+    setPrimary(readySnapshot());
+    const shortPlan: TradePlanDTO = {
+      entry_model: 'ZONE_ENTRY',
+      entry_low: 1876.0,
+      entry_high: 1880.2,
+      preferred_entry: 1876.0,
+      stop: 1889.13,
+      invalidation: 1889.13,
+      stop_source: 'swing_high',
+      risk: 13.13,
+      risk_atr: 1,
+      targets: [
+        { price: 1857.96, rr: 1.37, source: 'liquidity' },
+        { price: 1848.16, rr: 2.12, source: 'swing_low' },
+        { price: 1835.03, rr: 3.12, source: 'extension' },
+      ],
+      rr: [1.37, 2.12, 3.12],
+    };
+    const sell = signal({
+      side: 'short',
+      signal_class: 'SELL',
+      score: 79.2,
+      plan: shortPlan,
+      state: 'confirmed',
+      positive: ['الإطار الأعلى هابط'],
+      negative: ['زخم ضعيف'],
+      strategy_version: 'wese-trade-forward-4.2-a03e20f1d4',
+    });
+    setSignal(view({ strategy: FORWARD_STRATEGY, active: sell, lastConfirmed: sell }));
+    const panel = screen.getByLabelText('لوحة التحليل');
+    expect(panel).toHaveAttribute('data-signal-class', 'SELL');
+    expect(screen.getByTestId('signal-badge')).toHaveTextContent('بيع — اختبار مباشر');
+    expect(screen.getByTestId('signal-score')).toHaveTextContent('79/100');
+    expect(panel.querySelector('[data-plan="SL"]')).toHaveTextContent('1,889.13');
+    expect(panel.querySelector('[data-plan="TP1"]')).toHaveTextContent('1,857.96');
+    expect(panel.querySelector('[data-plan="TP3"]')).toHaveTextContent('1,835.03');
+    expect(panel.querySelector('[data-plan="R:R"]')).toHaveTextContent('1.4 / 2.1 / 3.1');
+    expect(screen.getByTestId('score-uncalibrated')).toHaveTextContent('غير معايرة');
+    expect(panel.textContent).not.toMatch(/STRONG|قوي جداً/);
   });
 
   it('shows the forward-test scope note on 1m/5m/10m', () => {

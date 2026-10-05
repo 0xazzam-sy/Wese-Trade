@@ -7,10 +7,18 @@ export interface HealthResponse {
   timestamp: string;
 }
 
-/** Honest status for backend modules that are not implemented yet. */
-export interface ModuleStatus {
-  module: string;
-  available: boolean;
-  phase: string;
-  message: string;
+/** GET /system/runtime: what this installation is running (no secrets). */
+export interface RuntimeInfo {
+  app_version: string;
+  mode: 'development' | 'desktop';
+  market_provider: string;
+  strategy: {
+    name: string;
+    version: string | null;
+    fingerprint: string | null;
+    status: string | null;
+  };
+  news_enabled: boolean;
+  weather_enabled: boolean;
+  paths?: { root: string; data: string; logs: string; exports: string; backups: string };
 }

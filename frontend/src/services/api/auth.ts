@@ -22,6 +22,19 @@ export const authApi = {
     });
   },
 
+  /** First run: true only while no account exists at all. */
+  setupStatus(signal?: AbortSignal): Promise<{ needs_setup: boolean }> {
+    return apiRequest('/auth/setup', { notifyUnauthorized: false, ...(signal ? { signal } : {}) });
+  },
+
+  setup(credentials: LoginCredentials): Promise<LoginResponse> {
+    return apiRequest<LoginResponse>('/auth/setup', {
+      method: 'POST',
+      body: credentials,
+      notifyUnauthorized: false,
+    });
+  },
+
   me(signal?: AbortSignal): Promise<User> {
     return apiRequest<User>('/auth/me', {
       notifyUnauthorized: false,
