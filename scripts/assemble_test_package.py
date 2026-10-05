@@ -8,7 +8,8 @@
   validated them (so the archive holds exactly the validated files).
 * Adds the seed database, the Arabic guides, VERSION.txt and TEST-ACCOUNTS-AR.txt (the only
   place the generated passwords are written).
-* Produces WeseTrade-Windows-Test/ and WeseTrade-Windows-Test-v1.0.0.zip.
+* Produces WeseTrade-Windows-Test/, WeseTrade-Windows-Test-v1.0.0.zip (installer, guides,
+  accounts) and WeseTrade-Windows-Test-v1.0.0-Portable.zip (optional portable copy).
 No passwords are printed. Nothing here is committed.
 """
 
@@ -197,17 +198,29 @@ def main() -> None:
         if sha256(pkg / name) != digest:
             raise SystemExit(f"copy mismatch: {name}")
 
-    archive = args.out / f"{NAME}-v1.0.0.zip"
-    with zipfile.ZipFile(
-        archive, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9
-    ) as zf:
-        for path in sorted(pkg.rglob("*")):
-            if path.is_file():
-                zf.write(path, path.relative_to(args.out).as_posix())
+    # Two archives (the full package exceeds the 30 MiB delivery limit): the main one with
+    # the installer (recommended) and an optional one with the portable copy. Extracting
+    # both into the same place recreates exactly WeseTrade-Windows-Test/.
+    archives = {
+        args.out / f"{NAME}-v1.0.0.zip": lambda rel: (
+            not rel.startswith(f"{NAME}/Portable/")
+        ),
+        args.out / f"{NAME}-v1.0.0-Portable.zip": lambda rel: rel.startswith(
+            f"{NAME}/Portable/"
+        ),
+    }
+    for archive, include in archives.items():
+        with zipfile.ZipFile(
+            archive, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9
+        ) as zf:
+            for path in sorted(pkg.rglob("*")):
+                rel = path.relative_to(args.out).as_posix()
+                if path.is_file() and include(rel):
+                    zf.write(path, rel)
+        print(f"{archive.name}: {archive.stat().st_size / 2**20:.1f} MiB")
     files = sum(1 for p in pkg.rglob("*") if p.is_file())
     print(
-        f"package OK: {archive} ({archive.stat().st_size / 1e6:.1f} MB, {files} files, "
-        f"{count} binaries verified against the Windows CI checksums)"
+        f"package OK: {files} files, {count} binaries verified against the Windows CI checksums"
     )
 
 
