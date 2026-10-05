@@ -13,18 +13,22 @@ using **OKX public market data**.
 > Signals are computed from OKX data, not from another exchange's execution price.
 > No automatic cross-exchange correction is attempted.
 
-**Current status: Phase 4.1 complete (signal-edge research, walk-forward validation, strategy validation status).**
+**Current status: Phase 4.2 — prospective forward test running (paper only).**
 
 > **Read this before using signals.** Phase 4.1 walk-forward research found **no robust edge**.
+>
 > - 12 liquid OKX perpetuals, 3 chronological validation windows.
 > - Baseline: −0.077 R per trade over 2,605 validation trades. No pre-registered candidate passed.
+> - Details: [`docs/research.md`](docs/research.md).
 >
-> The strategy is shown as «تجريبي · غير مُثبت».
-> - Directional signals only on 15m/30m/1h, and never from the reversal or breakout setups.
-> - 1m, 5m and 10m are research-only.
+> Phase 4.2 freezes **one** exploratory candidate as **`wese-trade-forward-4.2-a03e20f1d4`**
+> (fingerprint `4.2-a03e20f`) and measures it on **new** candles only. It is shown as
+> «اختبار مباشر»: «الإشارات قيد الاختبار وليست توصيات مضمونة.»
 >
-> Signals are analytical, **not** recommendations: «الإشارات تحليلية وليست ضماناً للربح.»
-> Details: [`docs/research.md`](docs/research.md).
+> - Directional signals only on 15m/30m/1h, from trend continuation only.
+> - 1m, 5m and 10m: «هذا الفريم غير مفعّل للإشارات حالياً».
+> - The Phase 4 baseline is shown as «غير مُثبت» and no longer emits BUY/SELL.
+> - Protocol, criteria and run record: [`docs/forward-testing.md`](docs/forward-testing.md).
 
 Phase 1 (foundation) provides:
 
@@ -74,6 +78,18 @@ Phase 4 adds the **signal engine** (no trading, no leverage, no LLM):
 - the signal panel, a details drawer, chart markers, Entry/SL/TP lines, and an
   admin/analyst backtest view (`/backtests`)
 - a backtester with fees, slippage, a 70/30 time split, and score calibration
+
+Phase 4.2 adds the **prospective forward test** (no tuning, no trading):
+
+- a frozen, hash-versioned candidate; signals only from candles that open after the
+  run's `started_at` and close live; restart-safe cursors with no replay and no duplicates
+- `forward_test_*` tables (runs, signals, outcomes, cursors, daily checkpoints), kept
+  separate from research and baseline data
+- net/gross expectancy, PF, drawdown, average/median R, and breakdowns by timeframe,
+  symbol, regime, side and score bucket; pre-registered pass/fail criteria
+  (≥ 150 closed trades and ≥ 30 days)
+- a dashboard status card and an admin/analyst `/forward-test` page with history, filters
+  and CSV/JSON export; admins can only pause, resume or stop
 
 The scanner and news are **not implemented yet**. Their fields show explicit placeholders
 ("--"), and no fake data is shown anywhere.
@@ -245,23 +261,23 @@ browser uses one origin and the secure httpOnly session cookie just works.
 
 ### Backend (inside `backend/` with the virtualenv active)
 
-| Task                                         | Command                                                     |
-| -------------------------------------------- | ----------------------------------------------------------- |
-| Run server                                   | `python -m app.main`                                        |
-| Apply migrations                             | `alembic upgrade head`                                      |
-| New migration                                | `alembic revision --autogenerate -m "describe"`             |
-| Create admin                                 | `python -m app.scripts.create_admin`                        |
-| Tests                                        | `pytest`                                                    |
-| Live OKX tests (internet)                    | `pytest -m live`                                            |
-| Live analysis tests (internet)               | `pytest -m live_analysis`                                   |
-| Download backtest history (internet, ~12 MB) | `python -m app.scripts.fetch_history`                       |
-| Run the backtest                             | `python -m app.scripts.run_backtest --name final --save-db` |
+| Task                                            | Command                                                                                     |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Run server                                      | `python -m app.main`                                                                        |
+| Apply migrations                                | `alembic upgrade head`                                                                      |
+| New migration                                   | `alembic revision --autogenerate -m "describe"`                                             |
+| Create admin                                    | `python -m app.scripts.create_admin`                                                        |
+| Tests                                           | `pytest`                                                                                    |
+| Live OKX tests (internet)                       | `pytest -m live`                                                                            |
+| Live analysis tests (internet)                  | `pytest -m live_analysis`                                                                   |
+| Download backtest history (internet, ~12 MB)    | `python -m app.scripts.fetch_history`                                                       |
+| Run the backtest                                | `python -m app.scripts.run_backtest --name final --save-db`                                 |
 | Research: choose universe + download (internet) | `python -m app.scripts.research_fetch --select` then `python -m app.scripts.research_fetch` |
-| Research: walk-forward studies               | `python -m app.scripts.run_research --name phase41`         |
-| Research: Markdown report                    | `python -m app.scripts.research_report --name phase41`      |
-| Lint                                         | `ruff check .`                                              |
-| Format                                       | `ruff format .`                                             |
-| Type-check (strict)                          | `mypy app tests alembic`                                    |
+| Research: walk-forward studies                  | `python -m app.scripts.run_research --name phase41`                                         |
+| Research: Markdown report                       | `python -m app.scripts.research_report --name phase41`                                      |
+| Lint                                            | `ruff check .`                                                                              |
+| Format                                          | `ruff format .`                                                                             |
+| Type-check (strict)                             | `mypy app tests alembic`                                                                    |
 
 ### Frontend (inside `frontend/`)
 

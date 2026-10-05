@@ -282,18 +282,50 @@ expectancy fell as the score rose), so no probability is shown.
 News is display-only. The `news` package must never be imported by `signal_engine`,
 `scanner` or `backtesting`. Signals must be reproducible from market data alone.
 
+### Phase 4.2 implementation: prospective forward test (see `docs/forward-testing.md`)
+
+```
+AnalysisService ──AnalysisListener──► ForwardTestService (owns 12 symbols × 15m/30m/1h)
+                                         │ on_seeded: catch-up after cursor (lifecycle only)
+                                         │ on_closed: open_time >= started_at, live, not stale
+                                         ▼
+          forward_test.evaluate_candle = gate + research_hypotheses + evaluate_hyps
+                                         (the same functions as the Phase 4.1 simulator)
+                                         ▼
+          SignalTracker (frozen terms, paper fills, conservative same-candle ambiguity)
+                                         ▼
+     background writer → forward_test_* tables · /api/v1/forward-test · signal.* events
+```
+
+- **Ownership.**
+  - `SignalService.excluded` is `forward_test.owns`, so the baseline never evaluates the
+    streams the forward test owns.
+  - `SignalService.delegate` routes `subscribe`/`current` for those streams to the forward
+    test.
+  - The baseline deployment is non-directional.
+- **Immutability.**
+  - The run stores its frozen config.
+  - The service refuses to resume a run whose `strategy_version` differs from the code.
+  - Only one open run per version is allowed (a partial unique index).
+- **No tuning surface.** The API exposes reads plus admin pause, resume and stop.
+
 ---
 
 ## 6. Database
 
 Tables:
 
-| Table             | Since | Purpose                                                                                                                      |
-| ----------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `users`           | 1     | `id, username, password_hash, role, is_active, created_at, updated_at, last_login_at`                                        |
-| `signals`         | 4     | Every confirmed signal: frozen plan/score/components/evidence, lifecycle state, `source` (live/backtest), `strategy_version` |
-| `signal_outcomes` | 4     | Exits, gross/net R, ambiguity, MFE/MAE per signal                                                                            |
-| `backtest_runs`   | 4     | Config, data ranges, summary metrics, `strategy_version`                                                                     |
+| Table                      | Since | Purpose                                                                                                                      |
+| -------------------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `users`                    | 1     | `id, username, password_hash, role, is_active, created_at, updated_at, last_login_at`                                        |
+| `signals`                  | 4     | Every confirmed signal: frozen plan/score/components/evidence, lifecycle state, `source` (live/backtest), `strategy_version` |
+| `signal_outcomes`          | 4     | Exits, gross/net R, ambiguity, MFE/MAE per signal                                                                            |
+| `backtest_runs`            | 4     | Config, data ranges, summary metrics, `strategy_version`                                                                     |
+| `forward_test_runs`        | 4.2   | One prospective run: frozen config, `started_at`, status + history, symbols, timeframes, cost model, minimums                |
+| `forward_test_signals`     | 4.2   | Confirmed forward-test signals: frozen terms (insert-once) + lifecycle                                                       |
+| `forward_test_outcomes`    | 4.2   | Gross/net R, fees R, slippage R, holding bars, ambiguity per final signal                                                    |
+| `forward_test_cursors`     | 4.2   | Last processed close per (run, symbol, timeframe): restart without replay                                                    |
+| `forward_test_checkpoints` | 4.2   | Daily metric snapshots                                                                                                       |
 
 All datetimes are timezone-aware UTC (`UTCDateTime` type).
 
