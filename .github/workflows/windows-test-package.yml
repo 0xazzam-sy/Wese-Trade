@@ -108,7 +108,8 @@ jobs:
           set -e
           cd windows-test-binaries
           rm -rf TestData
-          find . -type f | sort | sed 's|^\./||' | while read -r f; do sha256sum "$f"; done > SHA256SUMS.txt
+          find . -type f | sort | sed 's|^\./||' | while read -r f; do sha256sum "$f"; done > "$RUNNER_TEMP/SHA256SUMS.txt"
+          mv "$RUNNER_TEMP/SHA256SUMS.txt" SHA256SUMS.txt
           wc -l SHA256SUMS.txt
           grep -E "WeseTrade-Setup.exe|Wese Trade.exe|Setup-Test-Accounts.cmd" SHA256SUMS.txt
           printf 'source_commit=%s\nbuilt_at_utc=%s\nrun=%s\n' "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$GITHUB_RUN_ID" > BUILD-INFO.txt

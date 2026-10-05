@@ -47,7 +47,9 @@ def verify_binaries(binaries: Path) -> tuple[dict[str, str], int]:
     sums = {}
     for line in (binaries / "SHA256SUMS.txt").read_text(encoding="utf-8").splitlines():
         digest, name = line.split(maxsplit=1)
-        sums[name.lstrip("*")] = digest
+        name = name.lstrip("*")
+        if name != "SHA256SUMS.txt":  # a checksum file cannot list itself
+            sums[name] = digest
     for name, digest in sums.items():
         actual = sha256(binaries / name)
         if actual != digest:
@@ -174,7 +176,10 @@ def main() -> None:
     )
     (pkg / "TestData").mkdir()
     shutil.copy2(seed_db, pkg / "TestData" / "wese_trade.db")
-    shutil.copy2(args.binaries / "SHA256SUMS.txt", pkg / "SHA256SUMS.txt")
+    (pkg / "SHA256SUMS.txt").write_text(
+        "".join(f"{digest}  {name}\n" for name, digest in sorted(sums.items())),
+        encoding="utf-8",
+    )
 
     assembled = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     write_windows_text(
