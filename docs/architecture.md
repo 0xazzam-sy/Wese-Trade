@@ -309,6 +309,28 @@ AnalysisService ──AnalysisListener──► ForwardTestService (owns 12 symb
   - Only one open run per version is allowed (a partial unique index).
 - **No tuning surface.** The API exposes reads plus admin pause, resume and stop.
 
+### Phase 4.2.5 / 4.3: product completion and desktop runtime (see `docs/desktop.md`)
+
+```
+Tauri shell (Rust) ── free 127.0.0.1 port, app-data root, token ──► packaged sidecar
+   │  splash/crash page (tauri://)            app/desktop.py: migrate(+backup) → uvicorn
+   │  window → http://127.0.0.1:<port>/  ◄──── app/web.py: same-origin UI + CSP
+   │  monitor (crash → Arabic crash page)      TrustedHost (loopback) + WS same-origin check
+   └─ exit: POST /system/shutdown → bounded wait → kill;  stdin EOF = parent gone
+```
+
+- **Runtime paths.** One module, `app/core/runtime.py`, defines the development and desktop
+  layouts. The shell resolves the native per-user app-data directory and passes it in.
+- **Auth.**
+  - First-run admin: `/auth/setup` works only while there are zero users.
+  - Admin user management: `/users`.
+  - The secret is per installation (`data/secret_key`).
+- **News and weather.** Both are real and display only: Arabic RSS and Open-Meteo, proxied by
+  the backend. An import-boundary test keeps them out of the signal, forward-test, analysis,
+  research and backtesting code.
+- **Removed placeholders.** The scanner status route, scanner contracts, the
+  `scanner.update` event and the empty «الإشارة/الثقة» market-list columns are gone.
+
 ---
 
 ## 6. Database

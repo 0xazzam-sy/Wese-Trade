@@ -13,7 +13,13 @@ using **OKX public market data**.
 > Signals are computed from OKX data, not from another exchange's execution price.
 > No automatic cross-exchange correction is attempted.
 
-**Current status: Phase 4.2 — prospective forward test running (paper only).**
+**Current status: Phase 4.3 — Wese Trade Desktop 1.0.0 (Windows x64, macOS Apple Silicon).**
+
+> **Desktop app.** Install and run; no Python, Node or terminal needed. The app starts its
+> own local service and keeps all data in your user's app-data folder. The first launch
+> asks you to create the administrator account. Architecture, updates, signing and
+> building: [`docs/desktop.md`](docs/desktop.md). Product audit:
+> [`docs/product-audit.md`](docs/product-audit.md).
 
 > **Read this before using signals.** Phase 4.1 walk-forward research found **no robust edge**.
 >
@@ -188,7 +194,10 @@ This creates the SQLite database at `backend/data/wese_trade.db`, including the 
 `signals`, `signal_outcomes` and `backtest_runs` tables (migration `0002_signals`). Run it
 again after every update.
 
-### 6. Create the initial admin account
+### 6. Create the initial admin account (optional)
+
+The first visit to the app shows a first-run screen that creates the administrator, so
+this step is optional. The command below does the same from a terminal.
 
 ```bash
 python -m app.scripts.create_admin
@@ -321,11 +330,15 @@ wese-trade/
 │   │   ├── signal_engine/   Signal engine (Phase 4): rules, scoring, trade plan, lifecycle, live service
 │   │   ├── backtesting/     History download, replay/simulate, metrics, reports
 │   │   ├── research/        Phase 4.1: research store, universe, walk-forward studies
-│   │   ├── scanner/         Contracts only
-│   │   ├── news/            Contracts + honest empty feed
-│   │   ├── scripts/         create_admin, fetch_history, run_backtest CLIs
+│   │   ├── forward_test/    Phase 4.2 frozen forward test (service, store, metrics, bootstrap)
+│   │   ├── news/            Arabic RSS/Atom news (display only, cached, never used by signals)
+│   │   ├── weather/         Open-Meteo proxy (display only)
+│   │   ├── desktop.py       Packaged sidecar entrypoint (loopback, migrate+backup, shutdown)
+│   │   ├── web.py           Same-origin serving of the compiled UI with CSP (desktop)
+│   │   ├── scripts/         create_admin, fetch_history, run_backtest, forward_test CLIs
 │   │   └── utils/           UTC time helpers
 │   ├── alembic/             Migrations
+│   ├── packaging/           PyInstaller spec for the desktop sidecar
 │   ├── tests/               pytest suite
 │   └── data/                SQLite database, backtest history + reports (git-ignored)
 ├── frontend/                React + TypeScript + Vite + Tailwind
@@ -346,8 +359,13 @@ wese-trade/
 ├── docs/signal-engine.md      Signal rules, scoring, trade plan, lifecycle, API/events
 ├── docs/backtesting.md        Backtest methodology and honest validation results (Phase 4)
 ├── docs/research.md           Phase 4.1 signal-edge research: walk-forward, robustness, verdict
+├── docs/forward-testing.md    Phase 4.2 prospective forward test
+├── docs/product-audit.md      Phase 4.2.5 product audit + acceptance gate
+├── docs/desktop.md            Phase 4.3 desktop app: lifecycle, paths, updater, signing, CI
 ├── docs/bingx-market-data.md  Historical: the former BingX provider (removed)
-└── scripts/                 dev.sh (run both), check.sh (all quality gates)
+├── desktop/                 Tauri 2 shell (src-tauri/) + splash/crash page (ui/)
+├── .github/workflows/       CI gates, Windows/macOS desktop validation, signed draft releases
+└── scripts/                 dev.sh, check.sh, build_sidecar.py, desktop_smoke.py
 ```
 
 For design decisions and the future analysis pipeline, see

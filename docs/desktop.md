@@ -47,10 +47,10 @@ same resolver Tauri uses). It is passed to the backend as `WESE_RUNTIME_ROOT`. T
 has one canonical path module, `backend/app/core/runtime.py`, and no OS checks are
 scattered through the Python code.
 
-| OS | Root |
-| --- | --- |
-| Windows | `%LOCALAPPDATA%\WeseTrade\` |
-| macOS | `~/Library/Application Support/WeseTrade/` |
+| OS      | Root                                       |
+| ------- | ------------------------------------------ |
+| Windows | `%LOCALAPPDATA%\WeseTrade\`                |
+| macOS   | `~/Library/Application Support/WeseTrade/` |
 
 ```
 data/      wese_trade.db (+ -wal/-shm), secret_key (per-installation, 0600, never logged)
@@ -186,11 +186,11 @@ automatically. Keep it backed up.
 GitHub holds source, CI/CD, release artifacts and history. It is **never** used for the
 runtime database, logs or forward-test data.
 
-| Workflow | Trigger | What it does |
-| --- | --- | --- |
-| `ci.yml` | push / PR | backend + frontend gates (ruff, mypy, pytest, eslint, prettier, tsc, vitest, build) |
-| `desktop.yml` | push / PR (desktop, backend, frontend) | see the steps below |
-| `release.yml` | tag `vX.Y.Z` | see the steps below |
+| Workflow      | Trigger                                | What it does                                                                        |
+| ------------- | -------------------------------------- | ----------------------------------------------------------------------------------- |
+| `ci.yml`      | push / PR                              | backend + frontend gates (ruff, mypy, pytest, eslint, prettier, tsc, vitest, build) |
+| `desktop.yml` | push / PR (desktop, backend, frontend) | see the steps below                                                                 |
+| `release.yml` | tag `vX.Y.Z`                           | see the steps below                                                                 |
 
 `desktop.yml` runs on **windows-latest** and **macos-14** (Apple Silicon):
 
@@ -215,6 +215,7 @@ runtime database, logs or forward-test data.
 Users receive the update only after a person publishes the draft.
 
 Release steps:
+
 1. Bump the version everywhere. A test enforces that these match:
    - `backend/app/__init__.py` and `backend/pyproject.toml`;
    - `frontend/package.json` and `desktop/package.json`;
@@ -276,11 +277,11 @@ The browser workflow (`scripts/dev.sh`) is unchanged.
 
 ## 11. Troubleshooting
 
-| Symptom | Where to look / what to do |
-| --- | --- |
-| «تعذر تشغيل خدمة Wese Trade المحلية» | Settings or the error page → «فتح السجلات». Read `logs/backend-stderr.log` and `logs/backend.log` |
-| «فشل تحديث قاعدة البيانات» | The original DB was restored. A copy is in `backups/`. Send `backend.log` |
-| «بيانات السوق غير متصلة» | No internet or OKX unreachable. The app keeps working with saved data and reconnects automatically |
-| News / weather unavailable | The source is unreachable. The last cached headlines stay visible. Signals are never affected |
-| App already running | Only one instance is allowed. Launching again focuses the existing window |
-| Reset everything | Quit the app, then move the data root (§2) elsewhere. A new run starts on the next launch |
+| Symptom                              | Where to look / what to do                                                                         |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| «تعذر تشغيل خدمة Wese Trade المحلية» | Settings or the error page → «فتح السجلات». Read `logs/backend-stderr.log` and `logs/backend.log`  |
+| «فشل تحديث قاعدة البيانات»           | The original DB was restored. A copy is in `backups/`. Send `backend.log`                          |
+| «بيانات السوق غير متصلة»             | No internet or OKX unreachable. The app keeps working with saved data and reconnects automatically |
+| News / weather unavailable           | The source is unreachable. The last cached headlines stay visible. Signals are never affected      |
+| App already running                  | Only one instance is allowed. Launching again focuses the existing window                          |
+| Reset everything                     | Quit the app, then move the data root (§2) elsewhere. A new run starts on the next launch          |

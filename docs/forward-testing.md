@@ -321,3 +321,17 @@ only observes candles while the backend runs.
 - If the host or container is recycled, the run and its rows go with that database.
 - In that case, start the backend from a persistent machine with the same database.
 - Never create a backdated replacement run.
+
+### Desktop installations (Phase 4.3)
+
+The packaged app keeps its **own permanent** forward test in its app-data database. See
+[`desktop.md`](desktop.md) §6.
+
+- On the first launch with no open local run, a **new** run of
+  `wese-trade-forward-4.2-a03e20f1d4` starts at the current UTC time. It is never
+  backdated.
+- Later launches resume that run.
+
+The temporary build-container run above is not migrated and does not become the desktop
+run. Container run 1 stopped observing at about 07:36Z, when the container was recycled,
+exactly as warned above.
