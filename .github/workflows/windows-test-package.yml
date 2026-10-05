@@ -1,0 +1,142 @@
+# PERSONAL WINDOWS TEST PACKAGE (not a release). Manually triggered.
+#
+# Builds the Windows x64 installer + a portable copy, then validates BOTH on a clean
+# windows-latest runner with the real test-package flow:
+#   Setup-Test-Accounts.cmd -> app launched normally -> admin/analyst/viewer logins and
+#   permissions -> OKX, symbols, chart data, analysis, signal policy -> forward test started
+#   at launch time -> window close -> graceful backend stop, no orphan -> relaunch keeps
+#   users and the same run.
+# The validation uses THROWAWAY accounts generated on the runner (passwords never printed).
+# The user's real test accounts are generated outside GitHub and never touch it.
+# The validated binaries + SHA256SUMS are pushed to the `windows-test-binaries` branch so
+# the package can be assembled offline; no passwords, no databases, no secrets are pushed.
+name: Windows test package
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: Build + validate Windows test binaries
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-build.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            desktop/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+
+      - name: Build backend sidecar + frontend (self-tested)
+        shell: bash
+        run: |
+          python -m pip install -r backend/requirements-build.txt
+          python scripts/build_sidecar.py
+
+      - name: Build Windows installer
+        working-directory: desktop
+        shell: bash
+        run: |
+          npm ci
+          npx tauri build --bundles nsis --config '{"bundle":{"createUpdaterArtifacts":false}}'
+
+      - name: Assemble binaries (installer + portable)
+        shell: bash
+        run: |
+          set -e
+          out=windows-test-binaries
+          mkdir -p "$out/Portable"
+          cp desktop/src-tauri/target/release/bundle/nsis/*-setup.exe "$out/WeseTrade-Setup.exe"
+          cp desktop/src-tauri/target/release/wese-trade.exe "$out/Portable/Wese Trade.exe"
+          cp -R desktop/src-tauri/resources/backend "$out/Portable/backend"
+          rm -f "$out/Portable/backend/README.md"
+          cp packaging/windows-test/Setup-Test-Accounts.cmd "$out/"
+          du -sh "$out" "$out/WeseTrade-Setup.exe" "$out/Portable"
+
+      - name: Throwaway validation accounts (passwords never printed)
+        shell: bash
+        run: |
+          pip install -q -r backend/requirements.txt
+          python scripts/make_test_seed.py "$RUNNER_TEMP/ci-seed"
+          cp -R "$RUNNER_TEMP/ci-seed/TestData" windows-test-binaries/TestData
+
+      - name: Validate INSTALLER (silent per-user install, test accounts, real OKX)
+        shell: pwsh
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          Start-Process -FilePath windows-test-binaries\WeseTrade-Setup.exe -ArgumentList '/S' -Wait
+          $exe = Get-ChildItem "$env:LOCALAPPDATA\Wese Trade" -Recurse -Filter wese-trade.exe | Select-Object -First 1
+          if (-not $exe) { throw "installed app not found" }
+          Write-Host "Installed: $($exe.FullName)"
+          & cmd /c "windows-test-binaries\Setup-Test-Accounts.cmd /quiet"
+          if ($LASTEXITCODE -ne 0) { throw "Setup-Test-Accounts.cmd failed: $LASTEXITCODE" }
+          & cmd /c "windows-test-binaries\Setup-Test-Accounts.cmd /quiet"
+          if ($LASTEXITCODE -ne 1) { throw "Setup-Test-Accounts.cmd must refuse to overwrite existing data" }
+          python scripts/test_package_check.py --app $exe.FullName --creds "$env:RUNNER_TEMP\ci-seed\credentials.json" --require-okx --label installer
+          if ($LASTEXITCODE -ne 0) { throw "installer validation failed" }
+
+      - name: Validate PORTABLE (fresh data, test accounts, real OKX)
+        shell: pwsh
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          Rename-Item "$env:LOCALAPPDATA\WeseTrade" "WeseTrade-installer-run"
+          & cmd /c "windows-test-binaries\Setup-Test-Accounts.cmd /quiet"
+          if ($LASTEXITCODE -ne 0) { throw "Setup-Test-Accounts.cmd failed: $LASTEXITCODE" }
+          python scripts/test_package_check.py --app "windows-test-binaries\Portable\Wese Trade.exe" --creds "$env:RUNNER_TEMP\ci-seed\credentials.json" --require-okx --label portable
+          if ($LASTEXITCODE -ne 0) { throw "portable validation failed" }
+
+      - name: Checksums + hand off validated binaries (no secrets, no databases)
+        shell: bash
+        run: |
+          set -e
+          cd windows-test-binaries
+          rm -rf TestData
+          find . -type f | sort | sed 's|^\./||' | while read -r f; do sha256sum "$f"; done > SHA256SUMS.txt
+          wc -l SHA256SUMS.txt
+          grep -E "WeseTrade-Setup.exe|Wese Trade.exe|Setup-Test-Accounts.cmd" SHA256SUMS.txt
+          printf 'source_commit=%s\nbuilt_at_utc=%s\nrun=%s\n' "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$GITHUB_RUN_ID" > BUILD-INFO.txt
+          git init -q -b windows-test-binaries
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config core.autocrlf false
+          git add -A
+          git commit -q -m "Validated Windows test binaries for ${GITHUB_SHA}"
+          git push -q --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/windows-test-binaries
+          echo "pushed windows-test-binaries for ${GITHUB_SHA}"
+
+      - name: Collect logs
+        if: always()
+        shell: python
+        run: |
+          import os, shutil
+          from pathlib import Path
+          out = Path("package-logs"); out.mkdir(exist_ok=True)
+          base = Path(os.environ["LOCALAPPDATA"])
+          for root in (base / "WeseTrade", base / "WeseTrade-installer-run"):
+              for log in (root / "logs").glob("*.log*") if root.exists() else []:
+                  shutil.copy2(log, out / f"{root.name}-{log.name}")
+          print(sorted(p.name for p in out.iterdir()))
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-test-package-logs
+          path: package-logs/
+          retention-days: 7
