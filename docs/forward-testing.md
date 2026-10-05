@@ -274,4 +274,50 @@ python -m app.main                                         # the service loads t
 
 The real run, its validation and its start time are recorded below.
 
-<!-- RUN-RECORD -->
+### Run 1 (the real forward test)
+
+| Field                 | Value                                                           |
+| --------------------- | --------------------------------------------------------------- |
+| Run id                | 1                                                               |
+| Version / fingerprint | `wese-trade-forward-4.2-a03e20f1d4` / `4.2-a03e20f`             |
+| `started_at`          | **2026-10-05T07:01:59Z** (wall clock at `start`, not backdated) |
+| Symbols               | all 12 active on OKX at start (none excluded)                   |
+| Timeframes            | 15m, 30m, 1h                                                    |
+| Costs                 | base: taker 0.05 %, maker 0.02 %, slippage 0.02 %               |
+| Minimums              | 150 closed trades and 30 days                                   |
+| Status                | `forward_testing`                                               |
+
+The first eligible candles were 15m opening 07:15 (closed 07:30), 30m opening 07:30
+(closes 08:00) and 1h opening 08:00 (closes 09:00).
+
+At the 07:30 close the service evaluated **exactly 12** candles, all 15m. All 12 were
+NEUTRAL (gate reasons: excessive volatility, no clear opportunity, no qualifying setup).
+The 07:15 close produced none, as expected.
+
+### Validation (real OKX data, 2026-10-05)
+
+Validation used a **scratch** database with a throwaway run, so that the controls could be
+exercised without touching the real run. One check ran on the real run itself (marked
+below).
+
+| Check                                             | Result                                                                                                                              |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Universe loads                                    | 12/12 symbols live on OKX; 36 streams subscribed (12 × 15m/30m/1h)                                                                  |
+| No signals on 1m/5m/10m                           | `/signals/BTCUSDT?timeframe=5m` and `1m`: baseline, `signal_capable=false`, «هذا الفريم غير مفعّل للإشارات حالياً»                  |
+| 15m/30m/1h owned by the forward test              | `/signals/…?timeframe=15m` and `1h`: version `…a03e20f1d4`, «اختبار مباشر», `score_calibrated=false`                                |
+| Start boundary                                    | started 06:30:06; at the 06:45 close the cursor advanced to 06:45 with **0 evaluations** (the candle opened 06:30:00, before start) |
+| Restart (no duplicates)                           | reloaded run 1 with status `forward_testing`; 1 run row; 36 cursors unchanged                                                       |
+| Outage across a close                             | server down 06:59:20 → 07:00:45; on restart **36 catch-up candles**, **0 evaluations**, every cursor at 07:00                       |
+| Live evaluation after start (on the **real** run) | 07:30 close: 12 × 15m evaluations; the 30m candle opened before start and was not evaluated                                         |
+| Pause / resume / stop                             | each recorded in `status_history`; stop sets `stopped_at`; resume after stop → 409 `stopped -> forward_testing is not allowed`      |
+| Export                                            | CSV has a metadata line plus a header; JSON has run, metrics, checkpoints and signals; no secrets                                   |
+| Persistence errors                                | 0                                                                                                                                   |
+
+### Keeping the test running
+
+The run lives in the backend's database (`backend/data/`, git-ignored), and the service
+only observes candles while the backend runs.
+
+- If the host or container is recycled, the run and its rows go with that database.
+- In that case, start the backend from a persistent machine with the same database.
+- Never create a backdated replacement run.
