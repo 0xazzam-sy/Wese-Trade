@@ -88,8 +88,8 @@ completed in 4.2.5; 🗑 = removed.
 | 19 | Weather real | ✅ real Open-Meteo proxy (live check pending: host blocked here) |
 | 20 | Offline/disconnect UX | ✅ banners + offline sidecar startup test |
 | 21 | Migrations | ✅ fresh, existing (+backup), failure restore, downgrade/upgrade round trip |
-| 22–24 | Tests, types, lint, build | ✅ see counts below |
-| 25 | Live OKX checks | ✅ 22 live tests + live 15m evaluation in the sidecar |
+| 22–24 | Tests, types, lint, build | ✅ backend 349 passed (ruff, mypy clean); frontend 126 passed (tsc, eslint, prettier, build clean) |
+| 25 | Live OKX checks | ✅ 22 live tests; sidecar on real OKX evaluated exactly 12 × 15m candles at the 10:00Z close (all NEUTRAL with reasons), 0 errors |
 | 26 | No Phase 5 code | ✅ |
 
 **PRODUCT CORE STATUS: READY FOR DESKTOP PACKAGING**
