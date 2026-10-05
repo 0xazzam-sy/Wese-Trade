@@ -17,7 +17,6 @@ from starlette.types import Scope
 
 from app.core.config import API_V1_PREFIX
 
-
 TAURI_IPC = "ipc: http://ipc.localhost"  # desktop shell IPC (fixed, local-only schemes)
 
 
