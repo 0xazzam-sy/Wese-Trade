@@ -52,9 +52,11 @@ def _do_run_migrations(connection: Connection) -> None:
 async def run_migrations_online() -> None:
     settings = get_settings().model_copy(update={"database_url": _database_url()})
     engine = create_engine(settings)
-    async with engine.connect() as connection:
-        await connection.run_sync(_do_run_migrations)
-    await engine.dispose()
+    try:
+        async with engine.connect() as connection:
+            await connection.run_sync(_do_run_migrations)
+    finally:
+        await engine.dispose()
 
 
 if context.is_offline_mode():

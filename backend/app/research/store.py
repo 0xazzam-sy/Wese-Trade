@@ -22,7 +22,7 @@ from decimal import Decimal
 from itertools import pairwise
 from pathlib import Path
 
-from app.core.config import BACKEND_DIR
+from app.core.runtime import BACKEND_DIR
 from app.market_data.models import Candle
 from app.market_data.services.aggregation import aggregate_history
 from app.market_data.timeframes import Timeframe

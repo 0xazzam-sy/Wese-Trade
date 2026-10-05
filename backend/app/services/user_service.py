@@ -39,6 +39,23 @@ class UsernameTakenError(UserServiceError):
     pass
 
 
+class LastAdminError(UserServiceError):
+    """The change would leave no active administrator."""
+
+
+def user_error_detail(exc: UserServiceError) -> str:
+    """Stable API error codes (the UI maps them to Arabic messages)."""
+    if isinstance(exc, InvalidUsernameError):
+        return "invalid_username"
+    if isinstance(exc, WeakPasswordError):
+        return "weak_password"
+    if isinstance(exc, UsernameTakenError):
+        return "username_taken"
+    if isinstance(exc, LastAdminError):
+        return "last_admin"
+    return "invalid_user"
+
+
 def normalize_username(username: str) -> str:
     return username.strip().lower()
 
@@ -104,6 +121,43 @@ async def authenticate(session: AsyncSession, *, username: str, password: str) -
     if needs_rehash(user.password_hash):
         user.password_hash = hash_password(password)
     user.last_login_at = utc_now()
+    await session.commit()
+    await session.refresh(user)
+    return user
+
+
+async def list_users(session: AsyncSession) -> list[User]:
+    return list((await session.scalars(select(User).order_by(User.id))).all())
+
+
+async def update_user(
+    session: AsyncSession, user: User, *, role: UserRole | None, is_active: bool | None
+) -> User:
+    new_role = role if role is not None else user.role
+    new_active = is_active if is_active is not None else user.is_active
+    if (
+        user.role is UserRole.ADMIN
+        and user.is_active
+        and (new_role is not UserRole.ADMIN or not new_active)
+    ):
+        others = await session.scalar(
+            select(func.count())
+            .select_from(User)
+            .where(User.role == UserRole.ADMIN, User.is_active.is_(True), User.id != user.id)
+        )
+        if not others:
+            raise LastAdminError("At least one active administrator is required.")
+    user.role = new_role
+    user.is_active = new_active
+    await session.commit()
+    await session.refresh(user)
+    return user
+
+
+async def set_password(session: AsyncSession, user: User, password: str) -> User:
+    if problems := validate_password_strength(password):
+        raise WeakPasswordError(problems)
+    user.password_hash = hash_password(password)
     await session.commit()
     await session.refresh(user)
     return user

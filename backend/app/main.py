@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -12,13 +13,18 @@ from app import __version__
 from app.analysis.service import AnalysisService
 from app.api.v1.router import api_router
 from app.auth.rate_limit import LoginRateLimiter
-from app.core.config import API_V1_PREFIX, BACKEND_DIR, Settings, get_settings
+from app.core.config import API_V1_PREFIX, Settings, get_settings
 from app.core.logging import configure_logging, get_logger
+from app.core.runtime import BACKEND_DIR
 from app.core.state import AppResources
 from app.db.session import Database
+from app.forward_test.bootstrap import ensure_run, okx_active_symbols
 from app.forward_test.service import ForwardTestService
 from app.market_data.factory import build_market_engine
+from app.news.service import NewsService
 from app.signal_engine.service import SignalService
+from app.weather.service import WeatherService
+from app.web import mount_web
 from app.websocket.events import CLOSE_SERVER_SHUTDOWN
 from app.websocket.manager import ConnectionManager
 
@@ -27,7 +33,8 @@ logger = get_logger(__name__)
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
-    configure_logging(settings.log_level, json_output=settings.is_production)
+    if not settings.is_desktop:  # the desktop entrypoint configures file logging itself
+        configure_logging(settings.log_level, json_output=settings.is_production)
 
     connections = ConnectionManager()
     market = build_market_engine(settings, connections) if settings.market_data_enabled else None
@@ -50,6 +57,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     if signals is not None and forward_test is not None:
         signals.excluded = forward_test.owns
         signals.delegate = forward_test
+    news = NewsService(settings, cache_file=settings.paths.cache / "news.json")
+    weather = WeatherService(settings)
     resources = AppResources(
         settings=settings,
         database=database,
@@ -59,6 +68,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         analysis=analysis,
         signals=signals,
         forward_test=forward_test,
+        news=news,
+        weather=weather,
     )
 
     @asynccontextmanager
@@ -77,6 +88,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             logger.info("db.connected")
         else:
             logger.error("db.unavailable: check DATABASE_URL and run `alembic upgrade head`")
+        if settings.is_desktop and resources.forward_test is not None:
+            await _ensure_desktop_run(settings, resources.database)
         if resources.market is not None:
             # Starts in the background: an exchange outage never blocks or crashes startup.
             await resources.market.start()
@@ -86,7 +99,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await resources.signals.start()
         if resources.forward_test is not None:
             await resources.forward_test.start()
+        await news.start()
         yield
+        await news.stop()
+        await weather.close()
         if resources.forward_test is not None:
             await resources.forward_test.stop()
         if resources.signals is not None:
@@ -117,7 +133,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["Content-Type", "Accept"],
     )
     app.include_router(api_router, prefix=API_V1_PREFIX)
+    if settings.web_dir is not None:
+        mount_web(app, settings.web_dir)
     return app
+
+
+async def _ensure_desktop_run(settings: Settings, database: Database) -> None:
+    """Desktop: resume the local open run, or start a NEW one now (never backdated)."""
+
+    async def active() -> set[str]:
+        return await asyncio.wait_for(okx_active_symbols(settings.okx_rest_url), timeout=8)
+
+    try:
+        await ensure_run(
+            database, notes="desktop installation run (Phase 4.3)", active_symbols=active
+        )
+    except Exception:
+        logger.exception("forward_test.bootstrap_failed")
 
 
 def run() -> None:

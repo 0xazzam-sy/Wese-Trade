@@ -18,7 +18,7 @@ from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
-from app.core.config import BACKEND_DIR
+from app.core.runtime import BACKEND_DIR
 from app.market_data.models import Candle
 from app.market_data.okx import constants as c
 from app.market_data.okx.parser import parse_candles, to_inst_id

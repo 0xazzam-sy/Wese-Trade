@@ -103,7 +103,7 @@ async def realtime(websocket: WebSocket) -> None:
         await websocket.close(code=CLOSE_UNAUTHORIZED, reason="unauthorized")
         return
     try:
-        expires_at = decode_access_token(token, secret_key=settings.secret_key).expires_at
+        expires_at = decode_access_token(token, secret_key=settings.signing_key).expires_at
     except InvalidTokenError:
         await websocket.close(code=CLOSE_UNAUTHORIZED, reason="unauthorized")
         return

@@ -23,3 +23,14 @@ class SessionResponse(ApiModel):
 
     authenticated: bool
     user: UserPublic | None
+
+
+class SetupStatus(ApiModel):
+    """First run: true only while the database has no user at all."""
+
+    needs_setup: bool
+
+
+class SetupRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=64)
+    password: str = Field(min_length=1, max_length=256)

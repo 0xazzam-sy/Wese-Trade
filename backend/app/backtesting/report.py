@@ -14,7 +14,7 @@ from app.analysis.multi_timeframe.context import context_timeframes
 from app.backtesting import history
 from app.backtesting.metrics import compute, group
 from app.backtesting.runner import ReplayResult, replay, simulate
-from app.core.config import BACKEND_DIR
+from app.core.runtime import BACKEND_DIR
 from app.market_data.timeframes import Timeframe
 from app.signal_engine.calibration import calibration_table, monotonic_score
 from app.signal_engine.config import SignalConfig, strategy_version

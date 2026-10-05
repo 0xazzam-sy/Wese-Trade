@@ -108,11 +108,12 @@ async def test_logout_clears_cookie(client: httpx.AsyncClient, admin_user: User)
     assert (await client.get("/api/v1/auth/me")).status_code == 401
 
 
-async def test_placeholder_groups_are_protected_and_honest(
+async def test_route_groups_are_protected_and_honest(
     client: httpx.AsyncClient, admin_user: User
 ) -> None:
-    for group in ("markets", "scanner"):
-        assert (await client.get(f"/api/v1/{group}/status")).status_code == 401
+    assert (await client.get("/api/v1/markets/status")).status_code == 401
+    # The scanner is not built yet, so it has no route at all (no placeholder endpoint).
+    assert (await client.get("/api/v1/scanner/status")).status_code == 404
     assert (
         await client.get("/api/v1/signals/BTCUSDT", params={"timeframe": "5m"})
     ).status_code == 401
@@ -125,9 +126,6 @@ async def test_placeholder_groups_are_protected_and_honest(
     assert (await client.get("/api/v1/markets/symbols")).json() == {
         "detail": "market_data_disabled"
     }
-    body = (await client.get("/api/v1/scanner/status")).json()
-    assert body["module"] == "scanner"
-    assert body["available"] is False
     signal = await client.get("/api/v1/signals/BTCUSDT", params={"timeframe": "5m"})
     assert signal.json() == {"detail": "market_data_disabled"}  # honest, never fabricated
     assert (await client.get("/api/v1/backtests")).json() == {"items": []}

@@ -48,7 +48,7 @@ async def resolve_user_from_token(
     if not token:
         return None
     try:
-        claims = decode_access_token(token, secret_key=settings.secret_key)
+        claims = decode_access_token(token, secret_key=settings.signing_key)
     except InvalidTokenError:
         return None
     user = await get_user_by_id(session, claims.user_id)

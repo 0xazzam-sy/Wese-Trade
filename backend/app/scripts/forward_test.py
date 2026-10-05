@@ -13,71 +13,27 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-from dataclasses import asdict
-from datetime import UTC, datetime
 
 from app.core.config import get_settings
 from app.db.session import Database
 from app.forward_test import store
-from app.forward_test.candidate import (
-    CRITERIA,
-    RESEARCH_VERSION,
-    TIMEFRAMES,
-    UNIVERSE,
-    candidate,
-    fingerprint,
-    forward_version,
-    frozen_config,
-)
-from app.market_data.okx.rest import OkxRestClient
-from app.research.simulate import COSTS
-
-
-async def active_symbols() -> set[str]:
-    rest = OkxRestClient(get_settings().okx_rest_url)
-    try:
-        rows = await rest.get("/api/v5/public/instruments", {"instType": "SWAP"})
-    finally:
-        await rest.close()
-    return {
-        r["instId"].replace("-SWAP", "").replace("-", "")
-        for r in rows
-        if r.get("state") == "live" and r["instId"].endswith("-USDT-SWAP")
-    }
+from app.forward_test.bootstrap import create_run, okx_active_symbols
 
 
 async def start(notes: str) -> None:
-    v = candidate()
-    config = frozen_config(v)
-    version = forward_version(config)
-    live = await active_symbols()
-    symbols = [s for s in UNIVERSE if s in live]
-    missing = [s for s in UNIVERSE if s not in live]
-    if missing:
-        notes = f"{notes} | not active on OKX at start (excluded): {', '.join(missing)}".strip(" |")
     database = Database(get_settings())
     try:
-        async with database.session_factory() as session:
-            run = await store.create_run(
-                session,
-                version=version,
-                fingerprint=fingerprint(version),
-                research_version=RESEARCH_VERSION,
-                config=config,
-                started_at=datetime.now(UTC).replace(microsecond=0),
-                symbols=symbols,
-                timeframes=list(TIMEFRAMES),
-                cost_model=asdict(COSTS[v.costs]),
-                minimum_required_trades=CRITERIA.min_closed_trades,
-                minimum_days=CRITERIA.min_days,
-                notes=notes,
-            )
-            print(f"started run {run.id}: {version} ({fingerprint(version)})")
-            print(f"started_at (UTC): {run.started_at.isoformat()}")
-            print(f"symbols ({len(symbols)}): {', '.join(symbols)}")
-            print(f"timeframes: {', '.join(TIMEFRAMES)}")
-            if missing:
-                print("excluded (inactive):", ", ".join(missing))
+        run = await create_run(
+            database,
+            notes=notes,
+            active_symbols=lambda: okx_active_symbols(get_settings().okx_rest_url),
+        )
+        print(f"started run {run.id}: {run.strategy_version} ({run.fingerprint})")
+        print(f"started_at (UTC): {run.started_at.isoformat()}")
+        print(f"symbols ({len(run.symbols)}): {', '.join(run.symbols)}")
+        print(f"timeframes: {', '.join(run.timeframes)}")
+        if run.notes:
+            print(f"notes: {run.notes}")
     finally:
         await database.dispose()
 

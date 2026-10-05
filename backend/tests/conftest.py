@@ -31,6 +31,9 @@ def settings(tmp_path: Path) -> Settings:
         log_level="WARNING",
         ws_heartbeat_seconds=0.2,
         market_data_enabled=False,
+        news_enabled=False,  # unit tests never touch the network
+        weather_enabled=False,
+        runtime_root=tmp_path / "runtime",
         _env_file=None,
     )
 

@@ -42,7 +42,6 @@ class EventType(StrEnum):
     SIGNAL_CLOSED = "signal.closed"  # final state (tp3 / stop / expiry / invalidation / time)
 
     # --- Reserved for later phases (never emitted yet) -------------------------
-    SCANNER_UPDATE = "scanner.update"
 
 
 class EventEnvelope(BaseModel):

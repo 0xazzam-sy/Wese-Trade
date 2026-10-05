@@ -1,18 +1,20 @@
-"""News routes. Phase 1: no provider configured, so the feed is honestly empty.
+"""News routes: real Arabic headlines from configured RSS/Atom feeds (display only).
 
-News is display-only and MUST NEVER feed into the signal engine.
+News MUST NEVER feed into the signal engine or the forward test.
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, status
 
 from app.api.deps import CurrentUser, Resources
-from app.news.service import NewsFeed, get_news_feed
+from app.news.models import NewsFeed
 
 router = APIRouter(prefix="/news", tags=["news"])
 
 
 @router.get("", response_model=NewsFeed)
 async def list_news(_: CurrentUser, resources: Resources) -> NewsFeed:
-    return await get_news_feed(resources.settings)
+    if resources.news is None:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "news_unavailable")
+    return resources.news.feed()

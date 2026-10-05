@@ -20,3 +20,5 @@ class NewsFeed(ApiModel):
     items: list[NewsItem]
     available: bool
     message: str | None = None
+    updated_at: datetime | None = None  # last successful refresh (UTC)
+    stale: bool = False  # sources unreachable now; showing the last cached headlines

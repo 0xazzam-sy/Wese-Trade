@@ -10,6 +10,8 @@ import json
 import logging
 import sys
 from datetime import UTC, datetime
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 from typing import Any
 
 _RESERVED = set(logging.LogRecord("", 0, "", 0, "", None, None).__dict__) | {
@@ -61,13 +63,33 @@ class KeyValueFormatter(logging.Formatter):
         return line
 
 
-def configure_logging(level: str, *, json_output: bool) -> None:
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(JsonFormatter() if json_output else KeyValueFormatter())
+LOG_MAX_BYTES = 5 * 1024 * 1024
+LOG_BACKUPS = 5
 
+
+def _rotating(path: Path, formatter: logging.Formatter) -> RotatingFileHandler:
+    handler = RotatingFileHandler(
+        path, maxBytes=LOG_MAX_BYTES, backupCount=LOG_BACKUPS, encoding="utf-8"
+    )
+    handler.setFormatter(formatter)
+    return handler
+
+
+def configure_logging(level: str, *, json_output: bool, log_dir: Path | None = None) -> None:
+    """stdout in development; rotating files (backend.log, forward-test.log) on desktop."""
+    formatter: logging.Formatter = JsonFormatter() if json_output else KeyValueFormatter()
     root = logging.getLogger()
     root.handlers.clear()
-    root.addHandler(handler)
+    if log_dir is None:
+        handler: logging.Handler = logging.StreamHandler(sys.stdout)
+        handler.setFormatter(formatter)
+        root.addHandler(handler)
+    else:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        root.addHandler(_rotating(log_dir / "backend.log", formatter))
+        forward = logging.getLogger("app.forward_test")
+        forward.handlers.clear()
+        forward.addHandler(_rotating(log_dir / "forward-test.log", formatter))
     root.setLevel(level)
 
     # Route uvicorn's loggers through the same handler/format.
