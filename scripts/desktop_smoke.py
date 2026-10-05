@@ -119,6 +119,9 @@ def launch(app: Path, env: dict[str, str], report: Path, extra: dict[str, str]) 
 
 
 def main() -> None:
+    # Reports contain Arabic text: never depend on the console code page (cp1252 on Windows).
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("app", type=Path)
     parser.add_argument("--offline", action="store_true")

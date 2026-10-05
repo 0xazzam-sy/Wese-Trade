@@ -98,22 +98,35 @@ jobs:
 
       - name: Smoke test the installed app (real app-data dir, no Python/Node on PATH)
         shell: bash
+        env:
+          PYTHONIOENCODING: utf-8
         run: python scripts/desktop_smoke.py "$APP_EXE"
 
       - name: Smoke test offline startup + crash recovery (separate data root)
         shell: bash
         env:
+          PYTHONIOENCODING: utf-8
           WESE_RUNTIME_ROOT: ${{ runner.temp }}/wese offline/مستخدم/WeseTrade
         run: python scripts/desktop_smoke.py "$APP_EXE" --offline --crash
 
       - name: Collect logs
         if: always()
-        shell: bash
+        shell: python
         run: |
-          mkdir -p smoke-logs
-          for d in "$LOCALAPPDATA/WeseTrade/logs" "$HOME/Library/Application Support/WeseTrade/logs" "$RUNNER_TEMP/wese offline"; do
-            [ -d "$d" ] && cp -R "$d" "smoke-logs/$(echo "$d" | tr '/: ' '___')" || true
-          done
+          import os, shutil
+          from pathlib import Path
+          roots = [
+              Path(os.environ.get("LOCALAPPDATA", "")) / "WeseTrade",
+              Path.home() / "Library" / "Application Support" / "WeseTrade",
+              Path(os.environ["RUNNER_TEMP"]) / "wese offline",
+          ]
+          out = Path("smoke-logs")
+          out.mkdir(exist_ok=True)
+          for i, root in enumerate(roots):
+              for log in root.rglob("logs/*.log*") if root.exists() else []:
+                  target = out / f"{i}-{log.parent.parent.name}-{log.name}"
+                  shutil.copy2(log, target)
+          print(sorted(p.name for p in out.iterdir()))
 
       - uses: actions/upload-artifact@v4
         if: always()
