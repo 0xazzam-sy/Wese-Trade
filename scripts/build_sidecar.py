@@ -48,13 +48,22 @@ def build(skip_web: bool) -> Path:
     with tempfile.TemporaryDirectory() as work:
         run(
             [
-                sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean",
-                "--distpath", str(OUT), "--workpath", work,
+                sys.executable,
+                "-m",
+                "PyInstaller",
+                "--noconfirm",
+                "--clean",
+                "--distpath",
+                str(OUT),
+                "--workpath",
+                work,
                 str(BACKEND / "packaging" / "wese-trade-backend.spec"),
             ],
             BACKEND,
         )
-    (target / "README.md").write_text(README, encoding="utf-8")  # the committed placeholder
+    (target / "README.md").write_text(
+        README, encoding="utf-8"
+    )  # the committed placeholder
     return target / EXE
 
 
@@ -82,7 +91,9 @@ def self_test(exe: Path) -> None:
         try:
             for _ in range(240):
                 try:
-                    with urllib.request.urlopen(f"{base}/api/v1/health", timeout=1) as r:
+                    with urllib.request.urlopen(
+                        f"{base}/api/v1/health", timeout=1
+                    ) as r:
                         if r.status == 200:
                             break
                 except OSError:
@@ -90,9 +101,11 @@ def self_test(exe: Path) -> None:
             else:
                 raise SystemExit("self-test: sidecar never became healthy")
             with urllib.request.urlopen(f"{base}/api/v1/auth/setup", timeout=5) as r:
-                assert b'"needs_setup":true' in r.read(), "fresh install must need setup"
+                assert b'"needs_setup":true' in r.read(), (
+                    "fresh install must need setup"
+                )
             with urllib.request.urlopen(f"{base}/", timeout=5) as r:
-                assert b"<div id=\"root\">" in r.read(), "web app not served"
+                assert b'<div id="root">' in r.read(), "web app not served"
             req = urllib.request.Request(
                 f"{base}/api/v1/system/shutdown",
                 method="POST",

@@ -1,0 +1,107 @@
+# Signed release on a version tag (e.g. v1.0.0): validates, then builds Windows + macOS
+# installers and signed updater artifacts, and creates a DRAFT GitHub Release with
+# latest.json. Updates reach users only after a person reviews and publishes the draft.
+#
+# Required (Settings -> Secrets and variables -> Actions):
+#   secret   TAURI_SIGNING_PRIVATE_KEY           updater signing key (never committed)
+#   secret   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  its password (may be empty)
+#   variable TAURI_UPDATER_PUBKEY                matching public key
+# Optional code signing (unsigned builds are produced when absent; see docs/desktop.md):
+#   macOS: APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY,
+#          APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID (Developer ID + notarization)
+#   Windows: Authenticode via bundle.windows.signCommand (see docs/desktop.md)
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to release (e.g. v1.0.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    uses: ./.github/workflows/desktop.yml
+
+  release:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            args: --bundles nsis,msi
+          - os: macos-14
+            args: --target aarch64-apple-darwin --bundles app,dmg
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - name: Require updater signing configuration
+        shell: bash
+        env:
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
+        run: |
+          if [ -z "$KEY" ] || [ -z "$PUBKEY" ]; then
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY secret and TAURI_UPDATER_PUBKEY variable are required (docs/desktop.md)"
+            exit 1
+          fi
+          tag="${{ inputs.tag || github.ref_name }}"
+          version="$(python3 -c 'import json;print(json.load(open("desktop/src-tauri/tauri.conf.json"))["version"])')"
+          [ "v$version" = "$tag" ] || { echo "::error::tag $tag != app version $version"; exit 1; }
+          python3 - <<PY
+          import json, os
+          json.dump({"plugins": {"updater": {"pubkey": os.environ["PUBKEY"]}}},
+                    open("desktop/src-tauri/tauri.release.conf.json", "w"))
+          PY
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin' || '' }}
+      - name: Build backend sidecar + frontend (self-tested)
+        shell: bash
+        run: |
+          python -m pip install -r backend/requirements-build.txt
+          python scripts/build_sidecar.py
+      - name: Install desktop tooling
+        working-directory: desktop
+        run: npm ci
+      - name: Build, sign updater artifacts, create draft release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          projectPath: desktop
+          tauriScript: npx tauri
+          args: ${{ matrix.args }} --config src-tauri/tauri.release.conf.json
+          tagName: ${{ inputs.tag || github.ref_name }}
+          releaseName: "Wese Trade ${{ inputs.tag || github.ref_name }}"
+          releaseBody: |
+            Wese Trade desktop ${{ inputs.tag || github.ref_name }} (Windows x64, macOS Apple Silicon).
+            Strategy: wese-trade-forward-4.2-a03e20f1d4 (forward test — signals are not guaranteed recommendations).
+            Analysis only: no trading, no exchange accounts.
+          releaseDraft: true
+          prerelease: false
+          includeUpdaterJson: true
+          updaterJsonPreferNsis: true
