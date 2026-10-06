@@ -57,7 +57,9 @@ function check(name, ok, detail = "") {
 const browser = await pw.chromium.launch(
   process.env.CHROMIUM_PATH
     ? { executablePath: process.env.CHROMIUM_PATH }
-    : {},
+    : process.env.CHROMIUM_CHANNEL // e.g. "chrome" on CI runners (installed Google Chrome)
+      ? { channel: process.env.CHROMIUM_CHANNEL }
+      : {},
 );
 const context = await browser.newContext({
   viewport: { width: 1366, height: 768 },

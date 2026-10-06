@@ -205,14 +205,24 @@ runtime database, logs or forward-test data.
 4. run a second pass offline, with crash recovery, under a non-ASCII path containing spaces;
 5. upload the installers and logs.
 
-`release.yml`:
+`release.yml` (tag `vX.Y.Z`, or manual):
 
-1. runs `desktop.yml`;
-2. builds `WeseTrade_<v>_x64-setup.exe` + `.msi` (Windows) and `Wese Trade.app` + `.dmg`
-   (macOS arm64), with signed updater artifacts;
-3. creates a **draft** GitHub Release with `latest.json`.
+1. detects signing without printing anything: updater key (`TAURI_SIGNING_PRIVATE_KEY`
+   secret + `TAURI_UPDATER_PUBKEY` variable), Apple Developer ID secrets. Nothing is
+   generated; absent credentials give **unsigned** artifacts and **no `latest.json`**;
+2. scans the bundled payload (no databases, `.env`, keys, credentials, test accounts);
+3. builds `WeseTrade-Setup-v<v>.exe` + `WeseTrade-v<v>-x64.msi` (Windows) and
+   `WeseTrade-v<v>-macOS-arm64.dmg` (macOS arm64);
+4. validates the **exact final artifacts**: installs them (silent NSIS install / `.app`
+   copied out of the mounted DMG), runs `desktop_smoke.py` (online, offline + crash) and
+   `release_ui_check.py` (chart UI E2E against the installed app, real OKX);
+5. creates a **draft** release (Arabic notes from `docs/release-notes/<tag>.md`,
+   `SHA256SUMS.txt`, `latest.json` only when the updater artifacts are signed), downloads
+   every asset back and verifies the checksums;
+6. a manual run with `publish: true` re-verifies the draft and publishes it.
 
-Users receive the update only after a person publishes the draft.
+`rehearsal: true` (manual, on a branch) builds and validates the release artifacts without
+a tag or a release, so a tag is only ever created on an already validated commit.
 
 Release steps:
 
@@ -220,8 +230,8 @@ Release steps:
    - `backend/app/__init__.py` and `backend/pyproject.toml`;
    - `frontend/package.json` and `desktop/package.json`;
    - `desktop/src-tauri/tauri.conf.json` and `Cargo.toml`.
-2. Tag `vX.Y.Z` and push.
-3. Review the draft release, then publish.
+2. Run a rehearsal; then tag `vX.Y.Z` on that commit and push the tag.
+3. Review the draft release, then run `release.yml` with `publish: true`.
 
 ## 9. Code signing (not configured yet)
 

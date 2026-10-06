@@ -1,15 +1,21 @@
-# Signed release on a version tag (e.g. v1.0.0): validates, then builds Windows + macOS
-# installers and signed updater artifacts, and creates a DRAFT GitHub Release with
-# latest.json. Updates reach users only after a person reviews and publishes the draft.
+# Official release on a version tag (e.g. v1.0.0) — or manually for an existing tag.
 #
-# Required (Settings -> Secrets and variables -> Actions):
-#   secret   TAURI_SIGNING_PRIVATE_KEY           updater signing key (never committed)
-#   secret   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  its password (may be empty)
-#   variable TAURI_UPDATER_PUBKEY                matching public key
-# Optional code signing (unsigned builds are produced when absent; see docs/desktop.md):
-#   macOS: APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY,
-#          APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID (Developer ID + notarization)
-#   Windows: Authenticode via bundle.windows.signCommand (see docs/desktop.md)
+#   1. build (Windows x64 NSIS + MSI, macOS Apple Silicon .app + DMG) from the TAGGED commit
+#   2. validate the EXACT final artifacts on clean runners: install (Windows silent per-user
+#      install / macOS: copy the .app out of the mounted DMG), then the automated smoke test
+#      (first-run admin, forward test at launch time, relaunch persistence, graceful stop,
+#      no orphan, offline startup, crash recovery) and the chart UI E2E (real OKX, both charts,
+#      legend, layers, analysis-only timeframes, frozen-engine BUY/SELL fixture in test mode)
+#   3. create a DRAFT GitHub Release with the validated files, SHA256SUMS and Arabic notes,
+#      then download every asset back and verify its checksum
+#   4. `publish: true` (manual run) re-verifies the draft's assets and publishes it
+#
+# Signing is detected, never invented: no key is generated or printed here.
+#   Updater: secret TAURI_SIGNING_PRIVATE_KEY (+ _PASSWORD) and variable TAURI_UPDATER_PUBKEY.
+#            Absent -> no updater artifacts and NO latest.json (auto-update stays disabled).
+#   macOS:   APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY,
+#            APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID (Developer ID + notarization).
+#   Windows: Authenticode is not configured (see docs/desktop.md); installers are unsigned.
 name: Release
 
 on:
@@ -18,50 +24,44 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing tag to release (e.g. v1.0.0)"
-        required: true
+        description: "Existing tag (e.g. v1.0.0); ignored for a rehearsal"
+        required: false
+        default: ""
+      rehearsal:
+        description: "Build + validate the release artifacts of this ref only (no tag, no release)"
+        type: boolean
+        default: false
+      publish:
+        description: "Publish the existing validated draft (re-verifies checksums)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
 
-jobs:
-  validate:
-    uses: ./.github/workflows/desktop.yml
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
 
-  release:
-    needs: validate
+jobs:
+  build:
+    if: ${{ !inputs.publish }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: windows-latest
+          - name: Windows x64
+            os: windows-latest
             args: --bundles nsis,msi
-          - os: macos-14
+          - name: macOS Apple Silicon
+            os: macos-14
             args: --target aarch64-apple-darwin --bundles app,dmg
+    name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.ref }}
-      - name: Require updater signing configuration
-        shell: bash
-        env:
-          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
-        run: |
-          if [ -z "$KEY" ] || [ -z "$PUBKEY" ]; then
-            echo "::error::TAURI_SIGNING_PRIVATE_KEY secret and TAURI_UPDATER_PUBKEY variable are required (docs/desktop.md)"
-            exit 1
-          fi
-          tag="${{ inputs.tag || github.ref_name }}"
-          version="$(python3 -c 'import json;print(json.load(open("desktop/src-tauri/tauri.conf.json"))["version"])')"
-          [ "v$version" = "$tag" ] || { echo "::error::tag $tag != app version $version"; exit 1; }
-          python3 - <<PY
-          import json, os
-          json.dump({"plugins": {"updater": {"pubkey": os.environ["PUBKEY"]}}},
-                    open("desktop/src-tauri/tauri.release.conf.json", "w"))
-          PY
+          ref: ${{ inputs.rehearsal && github.sha || env.TAG }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -71,37 +71,249 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin' || '' }}
+
+      - name: Version + signing detection (values never printed)
+        id: sign
+        shell: bash
+        env:
+          UPD_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          UPD_PUB: ${{ vars.TAURI_UPDATER_PUBKEY }}
+          APPLE_CERT: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_ID_SET: ${{ secrets.APPLE_ID }}
+        run: |
+          version="$(python3 -c 'import json;print(json.load(open("desktop/src-tauri/tauri.conf.json"))["version"])')"
+          if [ "${{ inputs.rehearsal }}" != "true" ]; then
+            [ "v$version" = "$TAG" ] || { echo "::error::tag $TAG != app version $version"; exit 1; }
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ -n "$UPD_KEY" ] && [ -n "$UPD_PUB" ]; then updater=true; else updater=false; fi
+          if [ -n "$APPLE_CERT" ] && [ -n "$APPLE_ID_SET" ]; then apple=true; else apple=false; fi
+          echo "updater=$updater" >> "$GITHUB_OUTPUT"
+          echo "apple=$apple" >> "$GITHUB_OUTPUT"
+          echo "updater signing configured: $updater; Apple signing configured: $apple; Windows Authenticode: false"
+          python3 - <<'PY'
+          import json, os
+          updater = os.environ.get("UPD_KEY") and os.environ.get("UPD_PUB")
+          conf = {"bundle": {"createUpdaterArtifacts": bool(updater)}}
+          if updater:
+              conf["plugins"] = {"updater": {"pubkey": os.environ["UPD_PUB"]}}
+          json.dump(conf, open("desktop/src-tauri/tauri.release.conf.json", "w"))
+          PY
+
       - name: Build backend sidecar + frontend (self-tested)
         shell: bash
         run: |
           python -m pip install -r backend/requirements-build.txt
           python scripts/build_sidecar.py
-      - name: Install desktop tooling
+
+      - name: Release safety scan of the bundled payload
+        shell: bash
+        run: |
+          set -e
+          bad="$(find desktop/src-tauri/resources/backend frontend/dist \
+            \( -iname '*.db' -o -iname '*.db-wal' -o -iname '*.sqlite*' -o -iname '.env' -o -iname '.env.*' \
+               -o -iname 'secret_key' -o -iname 'credentials*' -o -iname '*.pem' -o -iname '*.key' \
+               -o -iname 'TEST-ACCOUNTS*' -o -iname '*.parquet' \) -print \
+            | grep -v '/certifi/cacert.pem$' || true)"  # public CA bundle only
+          if [ -n "$bad" ]; then echo "::error::sensitive files in the bundle:"; echo "$bad"; exit 1; fi
+          if grep -rIl -E "BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|admin_test|analyst_test|viewer_test" \
+               desktop/src-tauri/resources/backend frontend/dist 2>/dev/null; then
+            echo "::error::secret or test-account material in the bundle"; exit 1
+          fi
+          echo "bundle payload clean: no databases, env files, keys, credentials or test accounts"
+
+      - name: Build desktop bundles
         working-directory: desktop
-        run: npm ci
-      - name: Build, sign updater artifacts, create draft release
-        uses: tauri-apps/tauri-action@v0
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          UPD_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          UPD_PASS: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          A_CERT: ${{ secrets.APPLE_CERTIFICATE }}
+          A_CERT_PASS: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          A_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          A_ID: ${{ secrets.APPLE_ID }}
+          A_PASS: ${{ secrets.APPLE_PASSWORD }}
+          A_TEAM: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          npm ci
+          # only export signing variables that are really configured
+          if [ "${{ steps.sign.outputs.updater }}" = "true" ]; then
+            export TAURI_SIGNING_PRIVATE_KEY="$UPD_KEY" TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$UPD_PASS"
+          fi
+          if [ "${{ steps.sign.outputs.apple }}" = "true" ] && [ "$RUNNER_OS" = "macOS" ]; then
+            export APPLE_CERTIFICATE="$A_CERT" APPLE_CERTIFICATE_PASSWORD="$A_CERT_PASS" \
+              APPLE_SIGNING_IDENTITY="$A_IDENTITY" APPLE_ID="$A_ID" APPLE_PASSWORD="$A_PASS" APPLE_TEAM_ID="$A_TEAM"
+          fi
+          npx tauri build ${{ matrix.args }} --config src-tauri/tauri.release.conf.json
+
+      - name: Collect release files (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -e
+          v="${{ steps.sign.outputs.version }}"
+          b=desktop/src-tauri/target/release/bundle
+          mkdir -p out
+          cp $b/nsis/*-setup.exe "out/WeseTrade-Setup-v$v.exe"
+          cp $b/msi/*.msi "out/WeseTrade-v$v-x64.msi"
+          for f in $b/nsis/*-setup.exe.sig; do [ -f "$f" ] && cp "$f" "out/WeseTrade-Setup-v$v.exe.sig"; done
+          ls -la out
+
+      - name: Collect release files (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -e
+          v="${{ steps.sign.outputs.version }}"
+          b=desktop/src-tauri/target/aarch64-apple-darwin/release/bundle
+          mkdir -p out
+          cp $b/dmg/*.dmg "out/WeseTrade-v$v-macOS-arm64.dmg"
+          for f in $b/macos/*.app.tar.gz; do [ -f "$f" ] && cp "$f" "out/WeseTrade-v$v-macOS-arm64.app.tar.gz"; done
+          for f in $b/macos/*.app.tar.gz.sig; do [ -f "$f" ] && cp "$f" "out/WeseTrade-v$v-macOS-arm64.app.tar.gz.sig"; done
+          ls -la out
+
+      - name: Install the EXACT final artifact (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem out/WeseTrade-Setup-v*.exe | Select-Object -First 1
+          Start-Process -FilePath $setup.FullName -ArgumentList '/S' -Wait
+          $exe = Get-ChildItem "$env:LOCALAPPDATA\Wese Trade" -Recurse -Filter wese-trade.exe | Select-Object -First 1
+          if (-not $exe) { throw "installed app not found" }
+          "APP_EXE=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Install the EXACT final artifact (macOS, from the DMG)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -e
+          mnt="$(mktemp -d)"
+          hdiutil attach -nobrowse -readonly -mountpoint "$mnt" out/WeseTrade-v*-macOS-arm64.dmg
+          mkdir -p "$HOME/Applications"
+          cp -R "$mnt/Wese Trade.app" "$HOME/Applications/"
+          hdiutil detach "$mnt"
+          echo "APP_EXE=$HOME/Applications/Wese Trade.app/Contents/MacOS/wese-trade" >> "$GITHUB_ENV"
+
+      - name: Smoke test (first-run admin, persistence, graceful stop, no orphan)
+        shell: bash
+        env:
+          PYTHONIOENCODING: utf-8
+        run: python scripts/desktop_smoke.py "$APP_EXE"
+
+      - name: Smoke test offline startup + crash recovery
+        shell: bash
+        env:
+          PYTHONIOENCODING: utf-8
+          WESE_RUNTIME_ROOT: ${{ runner.temp }}/wese offline/WeseTrade
+        run: python scripts/desktop_smoke.py "$APP_EXE" --offline --crash
+
+      - name: Chart UI E2E on the installed app (real OKX + frozen-engine fixture)
+        shell: bash
+        env:
+          PYTHONIOENCODING: utf-8
+          WESE_RUNTIME_ROOT: ${{ runner.temp }}/wese ui/WeseTrade
+          CHROMIUM_CHANNEL: chrome
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+        run: |
+          npm install -g playwright@1.56.1
+          python scripts/release_ui_check.py "$APP_EXE" --out release-ui
+
+      - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          projectPath: desktop
-          tauriScript: npx tauri
-          args: ${{ matrix.args }} --config src-tauri/tauri.release.conf.json
-          tagName: ${{ inputs.tag || github.ref_name }}
-          releaseName: "Wese Trade ${{ inputs.tag || github.ref_name }}"
-          releaseBody: |
-            Wese Trade desktop ${{ inputs.tag || github.ref_name }} (Windows x64, macOS Apple Silicon).
-            Strategy: wese-trade-forward-4.2-a03e20f1d4 (forward test — signals are not guaranteed recommendations).
-            Analysis only: no trading, no exchange accounts.
-          releaseDraft: true
-          prerelease: false
-          includeUpdaterJson: true
-          updaterJsonPreferNsis: true
+          name: ui-${{ runner.os }}
+          path: release-ui/
+          retention-days: 30
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ runner.os }}
+          path: out/
+          retention-days: 30
+          if-no-files-found: error
+
+  draft:
+    if: ${{ !inputs.publish && !inputs.rehearsal }}
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: assets
+          merge-multiple: true
+      - name: Checksums, updater manifest (only when signed), draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          cd assets
+          v="${TAG#v}"
+          if [ -f "WeseTrade-Setup-v$v.exe.sig" ] && [ -f "WeseTrade-v$v-macOS-arm64.app.tar.gz.sig" ]; then
+            base="https://github.com/${GITHUB_REPOSITORY}/releases/download/$TAG"
+            python3 - "$v" "$base" <<'PY'
+          import json, sys
+          from datetime import datetime, timezone
+          v, base = sys.argv[1], sys.argv[2]
+          sig = lambda f: open(f, encoding="utf-8").read().strip()
+          json.dump({
+              "version": v,
+              "notes": f"Wese Trade {v}",
+              "pub_date": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "platforms": {
+                  "windows-x86_64": {"signature": sig(f"WeseTrade-Setup-v{v}.exe.sig"),
+                                     "url": f"{base}/WeseTrade-Setup-v{v}.exe"},
+                  "darwin-aarch64": {"signature": sig(f"WeseTrade-v{v}-macOS-arm64.app.tar.gz.sig"),
+                                     "url": f"{base}/WeseTrade-v{v}-macOS-arm64.app.tar.gz"},
+              },
+          }, open("latest.json", "w"), indent=2)
+          PY
+            echo "updater: signed artifacts -> latest.json"
+          else
+            echo "updater: NOT signed -> no latest.json (auto-update pending signing setup)"
+          fi
+          sha256sum * > "$RUNNER_TEMP/SHA256SUMS.txt" && mv "$RUNNER_TEMP/SHA256SUMS.txt" SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          ls -la
+          cd ..
+          cp "docs/release-notes/$TAG.md" "$RUNNER_TEMP/notes.md"
+          if [ -f assets/latest.json ]; then
+            echo "- التحديث التلقائي مفعّل (ملفات تحديث موقّعة و latest.json)." >> "$RUNNER_TEMP/notes.md"
+          else
+            echo "- التحديث التلقائي غير مفعّل في هذا الإصدار إلى حين إعداد مفاتيح توقيع التحديثات؛ التحديثات القادمة تُثبَّت يدوياً." >> "$RUNNER_TEMP/notes.md"
+          fi
+          sign_note="- ملفات Windows غير موقّعة رقمياً (Authenticode)."
+          echo "$sign_note" >> "$RUNNER_TEMP/notes.md"
+          gh release view "$TAG" >/dev/null 2>&1 && { echo "::error::release $TAG already exists"; exit 1; }
+          gh release create "$TAG" --draft --verify-tag --title "Wese Trade $TAG" \
+            --notes-file "$RUNNER_TEMP/notes.md" assets/*
+      - name: Verify uploaded assets (download back + checksums)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          mkdir verify && cd verify
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY"
+          sha256sum -c SHA256SUMS.txt
+          echo "all release assets verified"
+
+  publish:
+    if: ${{ inputs.publish }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Re-verify the draft and publish it
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          [ "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft -q .isDraft)" = "true" ] \
+            || { echo "::error::$TAG is not a draft"; exit 1; }
+          mkdir verify && cd verify
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY"
+          sha256sum -c SHA256SUMS.txt
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url,isDraft,assets \
+            -q '.url, .isDraft, (.assets[] | "\(.name) \(.size)")'
