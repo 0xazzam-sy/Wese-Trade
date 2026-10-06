@@ -31,6 +31,10 @@ on:
         description: "Build + validate the release artifacts of this ref only (no tag, no release)"
         type: boolean
         default: false
+      create_tag_at:
+        description: "Create the tag at this already validated commit SHA first (when tags cannot be pushed directly)"
+        required: false
+        default: ""
       publish:
         description: "Publish the existing validated draft (re-verifies checksums)"
         type: boolean
@@ -43,8 +47,33 @@ env:
   TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
+  tag:
+    if: ${{ inputs.create_tag_at != '' && !inputs.publish && !inputs.rehearsal }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.create_tag_at }}
+          fetch-depth: 0
+      - name: Create the annotated tag at the validated commit (never moves an existing tag)
+        run: |
+          set -e
+          sha="${{ inputs.create_tag_at }}"
+          [ "$(git rev-parse HEAD)" = "$(git rev-parse "$sha")" ]
+          version="$(python3 -c 'import json;print(json.load(open("desktop/src-tauri/tauri.conf.json"))["version"])')"
+          [ "v$version" = "$TAG" ] || { echo "::error::tag $TAG != app version $version"; exit 1; }
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
+            echo "::error::tag $TAG already exists"; exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Wese Trade $TAG (strategy wese-trade-forward-4.2-a03e20f1d4)" "$sha"
+          git push origin "refs/tags/$TAG"
+          echo "created $TAG at $sha"
+
   build:
-    if: ${{ !inputs.publish }}
+    needs: tag
+    if: ${{ always() && !inputs.publish && needs.tag.result != 'failure' && needs.tag.result != 'cancelled' }}
     strategy:
       fail-fast: false
       matrix:
@@ -233,7 +262,7 @@ jobs:
           if-no-files-found: error
 
   draft:
-    if: ${{ !inputs.publish && !inputs.rehearsal }}
+    if: ${{ always() && !inputs.publish && !inputs.rehearsal && needs.build.result == 'success' }}
     needs: build
     runs-on: ubuntu-latest
     steps:
