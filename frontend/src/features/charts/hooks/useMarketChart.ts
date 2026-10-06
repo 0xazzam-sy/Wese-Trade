@@ -85,7 +85,8 @@ export function useMarketChart(
     const setStream = (value: StreamState) => {
       setStreamState({ key, value });
     };
-    controllerRef.current?.reset();
+    // New chart context: clear candles, restore auto-scale, start a new generation.
+    const generation = controllerRef.current?.reset() ?? 0;
 
     const buffer: CandleBar[] = [];
     let historyLoaded = false;
@@ -136,7 +137,10 @@ export function useMarketChart(
       .then((response) => {
         if (!active) return;
         const chart = controllerRef.current;
-        const count = chart?.setHistory(response.candles) ?? 0;
+        // Double guard against stale responses: the run flag AND the chart generation.
+        if (response.symbol !== symbol || response.timeframe !== timeframe) return;
+        const count = chart?.setHistory(response.candles, generation) ?? 0;
+        if (count < 0) return;
         historyLoaded = true;
         const latest = chart?.latestTime ?? null;
         for (const bar of buffer.splice(0)) {

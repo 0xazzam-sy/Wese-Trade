@@ -79,7 +79,9 @@ export function SymbolSelector({ value, onChange }: SymbolSelectorProps) {
         }}
         className="hover:bg-surface-hover flex h-7 items-center gap-1.5 rounded-md px-2 transition-colors"
       >
-        <span className="ns-ltr text-fg text-sm font-semibold">{value}</span>
+        <span data-testid="chart-symbol" className="ns-ltr text-fg text-sm font-semibold">
+          {value}
+        </span>
         <span className="text-fg-subtle text-2xs">دائم</span>
         <ChevronDown className="text-fg-subtle size-3.5" />
       </button>

@@ -21,12 +21,24 @@ export type ApplyResult = 'updated' | 'appended' | 'historical' | 'ignored' | 'g
 export class ChartController {
   private times = new Set<number>();
   private lastTime: number | null = null;
+  private gen = 0;
 
   constructor(
     private readonly series: CandleSeries,
     /** Called after history loads with the number of bars (sets the initial view). */
     private readonly fit: (count: number) => void = () => undefined,
+    /**
+     * Called on every context change (symbol / timeframe / reload): restores price
+     * auto-scale and the time scale. Without it a price axis the user dragged or zoomed
+     * keeps the PREVIOUS symbol's range (BTC 85,000 → NEAR 5.3 = blank chart).
+     */
+    private readonly resetView: () => void = () => undefined,
   ) {}
+
+  /** Generation of the current chart context; stale loads compare against it. */
+  get generation(): number {
+    return this.gen;
+  }
 
   get hasHistory(): boolean {
     return this.lastTime !== null;
@@ -41,13 +53,22 @@ export class ChartController {
     return this.times.has(time);
   }
 
-  reset(): void {
+  /**
+   * Starts a new chart context: clears candles, restores auto-scale and returns the new
+   * generation. Anything loaded for an older generation is refused by setHistory.
+   */
+  reset(): number {
+    this.gen += 1;
     this.times = new Set();
     this.lastTime = null;
     this.series.setData([]);
+    this.resetView();
+    return this.gen;
   }
 
-  setHistory(bars: readonly CandleBar[]): number {
+  /** Returns the number of bars applied, or -1 when `generation` is stale (ignored). */
+  setHistory(bars: readonly CandleBar[], generation: number = this.gen): number {
+    if (generation !== this.gen) return -1;
     const normalized = normalizeHistory(bars);
     const data: ChartCandle[] = normalized.map(toChartCandle);
     this.series.setData(data);

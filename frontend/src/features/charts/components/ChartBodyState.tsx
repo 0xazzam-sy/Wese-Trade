@@ -36,8 +36,8 @@ export function ChartBodyState({
     content = (
       <div className="flex flex-col items-center gap-3" role="status">
         <CandleSkeleton />
-        <p className="text-fg-muted text-xs">
-          جاري تحميل شموع <span className="ns-ltr">{symbol}</span>…
+        <p className="text-fg-muted text-xs" data-testid="chart-loading">
+          جارٍ تحميل بيانات <span className="ns-ltr">{symbol}</span>...
         </p>
       </div>
     );
@@ -58,11 +58,11 @@ export function ChartBodyState({
           ? 'جاري تحميل قائمة العقود من OKX.'
           : 'تعذر تحميل بيانات السوق من OKX.';
     content = (
-      <div className="flex flex-col items-center gap-2">
+      <div className="flex flex-col items-center gap-2" data-testid="chart-error">
         <EmptyState
           compact
           icon={<AlertTriangle className="size-5" />}
-          title="تعذر تحميل الشموع"
+          title="تعذر تحميل بيانات السوق"
           description={description}
         />
         <Button className="pointer-events-auto h-8" onClick={onRetry}>

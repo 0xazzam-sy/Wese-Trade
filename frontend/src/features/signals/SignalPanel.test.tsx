@@ -4,6 +4,7 @@ import type { ReactElement } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { useAnalysisStore } from '@/stores/analysisStore';
+import { DEFAULT_CHARTS, useChartStore } from '@/stores/chartStore';
 import { notReady, readySnapshot } from '@/test/analysisFixture';
 import {
   evaluation,
@@ -14,11 +15,13 @@ import {
   STRATEGY,
   view,
 } from '@/test/signalFixture';
+import type { Timeframe } from '@/types/market';
 import type { SignalView, TradePlanDTO } from '@/types/signal';
 
 import { SignalPanel } from './SignalPanel';
 
 afterEach(() => {
+  useChartStore.setState({ charts: DEFAULT_CHARTS });
   useAnalysisStore.setState({
     byChart: { primary: null, secondary: null },
     signals: { primary: null, secondary: null },
@@ -31,14 +34,27 @@ function render(ui: ReactElement) {
   return rtlRender(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
 }
 
+/** The panel only shows data of the chart's canonical context: select it first. */
+function select(
+  chart: 'primary' | 'secondary',
+  data: { symbol: string; timeframe: string } | null,
+) {
+  if (!data) return;
+  const { setSymbol, setTimeframe } = useChartStore.getState();
+  setSymbol(chart, data.symbol);
+  setTimeframe(chart, data.timeframe as Timeframe);
+}
+
 function setSignal(v: SignalView | null) {
   act(() => {
+    select('primary', v);
     useAnalysisStore.getState().setSignal('primary', v);
   });
 }
 
 function setPrimary(snapshot: ReturnType<typeof readySnapshot> | null) {
   act(() => {
+    select('primary', snapshot);
     useAnalysisStore.getState().setAnalysis('primary', snapshot);
   });
 }
@@ -313,7 +329,9 @@ describe('SignalPanel (analysis)', () => {
     render(<SignalPanel />);
     setPrimary(readySnapshot());
     act(() => {
-      useAnalysisStore.getState().setAnalysis('secondary', notReady('loading_history', 'ETHUSDT'));
+      const snap = notReady('loading_history', 'ETHUSDT');
+      select('secondary', snap);
+      useAnalysisStore.getState().setAnalysis('secondary', snap);
     });
     act(() => {
       screen.getByRole('radio', { name: 'الثانوي' }).click();

@@ -73,6 +73,7 @@ export function ChartPanel({ chartId, className }: { chartId: ChartId; className
   const theme = useThemeStore((s) => s.theme);
   const setAnalysis = useAnalysisStore((s) => s.setAnalysis);
   const setSignal = useAnalysisStore((s) => s.setSignal);
+  const setFocused = useAnalysisStore((s) => s.setFocused);
   useEffect(() => {
     overlay.setModel(buildOverlayModel(analysis, toggles, open), readOverlayPalette());
   }, [overlay, analysis, open, toggles, theme]);
@@ -116,6 +117,10 @@ export function ChartPanel({ chartId, className }: { chartId: ChartId; className
       data-timeframe={selection.timeframe}
       data-load={load.status}
       data-analysis={analysis ? (analysis.analysis_ready ? 'ready' : 'not-ready') : 'none'}
+      data-analysis-symbol={analysis ? `${analysis.symbol}|${analysis.timeframe}` : ''}
+      onPointerDown={() => {
+        setFocused(chartId); // the analysis panel describes the chart the user works with
+      }}
       data-markers={toggles.signals && historyReady ? signals.length : 0}
       className={cn('ns-panel @container flex min-h-0 min-w-0 flex-col overflow-hidden', className)}
     >
@@ -129,9 +134,11 @@ export function ChartPanel({ chartId, className }: { chartId: ChartId; className
         maximized={maximized}
         onSymbolChange={(symbol) => {
           setSymbol(chartId, symbol);
+          setFocused(chartId);
         }}
         onTimeframeChange={(timeframe) => {
           setTimeframe(chartId, timeframe);
+          setFocused(chartId);
         }}
         onReload={reload}
         onToggleMaximize={() => {

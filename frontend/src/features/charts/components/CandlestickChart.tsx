@@ -47,22 +47,45 @@ export function CandlestickChart({
     const chart = createChart(container, buildChartOptions(palette));
     const series = chart.addSeries(CandlestickSeries, buildCandlestickOptions(palette));
     chartRef.current = chart;
-    const controller = new ChartController(series, (count) => {
-      if (count <= INITIAL_VISIBLE_BARS) {
-        chart.timeScale().fitContent();
-        return;
-      }
-      chart
-        .timeScale()
-        .setVisibleLogicalRange({ from: count - INITIAL_VISIBLE_BARS, to: count + 4 });
-    });
+    const resetView = () => {
+      // A dragged/zoomed price axis turns auto-scale off; a new context must never keep
+      // the previous symbol's price range.
+      series.priceScale().setAutoScale(true);
+      chart.timeScale().resetTimeScale();
+    };
+    const controller = new ChartController(
+      series,
+      (count) => {
+        series.priceScale().setAutoScale(true);
+        if (count <= INITIAL_VISIBLE_BARS) {
+          chart.timeScale().fitContent();
+          return;
+        }
+        chart
+          .timeScale()
+          .setVisibleLogicalRange({ from: count - INITIAL_VISIBLE_BARS, to: count + 4 });
+      },
+      resetView,
+    );
     seriesOptionsRef.current = (p) => {
       series.applyOptions(buildCandlestickOptions(p));
     };
     overlaysRef.current = new OverlayController({ chart, series });
     onController(controller);
 
+    // Read-only diagnostics for E2E/QA: what the chart is really showing (visible price
+    // range vs. the last candle). Never read by the app itself.
+    const inspect = window.setInterval(() => {
+      const range = series.priceScale().getVisibleRange();
+      const data = series.data();
+      const last = data[data.length - 1];
+      container.dataset.priceRange = range ? `${String(range.from)}:${String(range.to)}` : '';
+      container.dataset.lastClose = last && 'close' in last ? String(last.close) : '';
+      container.dataset.bars = String(data.length);
+    }, 500);
+
     return () => {
+      window.clearInterval(inspect);
       overlaysRef.current?.clear();
       overlaysRef.current = null;
       onController(null);

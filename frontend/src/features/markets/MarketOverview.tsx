@@ -7,6 +7,7 @@ import { Spinner } from '@/components/ui/Spinner';
 import { VirtualList } from '@/components/ui/VirtualList';
 import { cn } from '@/lib/cn';
 import { changePercent, direction, formatPercent, formatPrice } from '@/lib/marketFormat';
+import { useAnalysisStore } from '@/stores/analysisStore';
 import { useChartStore } from '@/stores/chartStore';
 import type { MarketSymbol, Ticker } from '@/types/market';
 
@@ -41,6 +42,7 @@ export function MarketOverview() {
   const tickers = useTickers();
   const selected = useChartStore((s) => s.charts.primary.symbol);
   const setSymbol = useChartStore((s) => s.setSymbol);
+  const setFocused = useAnalysisStore((s) => s.setFocused);
 
   const rows = useMemo<Row[]>(() => {
     const tickerMap = new Map((tickers.data?.items ?? []).map((t) => [t.symbol, t]));
@@ -131,6 +133,7 @@ export function MarketOverview() {
                   role="listitem"
                   onClick={() => {
                     setSymbol('primary', symbol.symbol);
+                    setFocused('primary'); // the analysis panel follows the chart that changed
                   }}
                   title="عرض في الرسم الرئيسي"
                   className={cn(

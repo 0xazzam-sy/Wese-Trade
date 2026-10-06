@@ -15,6 +15,7 @@ import {
 import { useSymbolMap } from '@/features/markets/queries';
 import { cn } from '@/lib/cn';
 import { formatPrice } from '@/lib/marketFormat';
+import { useFocusedChartContext } from '@/features/analysis/context/chartContext';
 import { useAnalysisStore } from '@/stores/analysisStore';
 import type { ChartId } from '@/stores/layoutStore';
 import type { AnalysisSnapshot } from '@/types/analysis';
@@ -184,10 +185,10 @@ function statusText(snapshot: AnalysisSnapshot | null): string | null {
  * never a probability of profit.
  */
 export function SignalPanel() {
-  const focused = useAnalysisStore((s) => s.focused);
   const setFocused = useAnalysisStore((s) => s.setFocused);
-  const snapshot = useAnalysisStore((s) => s.byChart[s.focused]);
-  const view = useAnalysisStore((s) => s.signals[s.focused]);
+  // Canonical context: never shows analysis of another symbol/timeframe than the chart.
+  const { context, snapshot, view } = useFocusedChartContext();
+  const focused = context.chartId;
   const symbols = useSymbolMap();
   const [debugOpen, setDebugOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -223,11 +224,13 @@ export function SignalPanel() {
       )}
       <header className="mb-2 flex items-center gap-2">
         <h2 className="text-sm font-semibold">تحليل السوق</h2>
-        {snapshot && (
-          <span className="ns-ltr text-fg-muted bg-sunken border-line rounded-md border px-1.5 text-xs">
-            {snapshot.symbol} · {timeframeLabel(snapshot.timeframe)}
-          </span>
-        )}
+        <span
+          data-testid="analysis-context"
+          data-chart={context.chartId}
+          className="ns-ltr text-fg-muted bg-sunken border-line rounded-md border px-1.5 text-xs"
+        >
+          {context.symbol} · {timeframeLabel(context.timeframe)}
+        </span>
         {status && (
           <span role="status" className="text-fg-subtle text-2xs">
             {status}
