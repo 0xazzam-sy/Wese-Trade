@@ -6,6 +6,16 @@ import type {
   ForwardSignalRow,
   ForwardStatusCard,
 } from '@/types/forwardTest';
+import type { SignalDTO } from '@/types/signal';
+
+export interface ChartSignalsResponse {
+  symbol: string;
+  timeframe: string;
+  signal_capable: boolean;
+  strategy_version?: string;
+  fingerprint?: string;
+  items: SignalDTO[];
+}
 
 const withSignal = (signal?: AbortSignal) => (signal ? { signal } : {});
 
@@ -13,6 +23,16 @@ const withSignal = (signal?: AbortSignal) => (signal ? { signal } : {});
 export const forwardTestApi = {
   status(signal?: AbortSignal): Promise<ForwardStatusCard> {
     return apiRequest<ForwardStatusCard>('/forward-test/status', withSignal(signal));
+  },
+
+  /** Persisted confirmed forward-test signals of one chart stream (chart markers). */
+  chartSignals(
+    symbol: string,
+    timeframe: string,
+    signal?: AbortSignal,
+  ): Promise<ChartSignalsResponse> {
+    const query = new URLSearchParams({ symbol, timeframe });
+    return apiRequest(`/forward-test/chart-signals?${query.toString()}`, withSignal(signal));
   },
 
   runs(signal?: AbortSignal): Promise<{ items: { id: number; status: string }[] }> {

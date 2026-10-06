@@ -124,6 +124,19 @@ class View implements IPrimitivePaneView {
  * chart as a single series primitive. Zones render beneath candles, lines/labels above.
  * The overlay only draws: it never computes analysis.
  */
+/** Minimum vertical distance between two trade-plan labels (px). */
+export const PLAN_LABEL_GAP = 12;
+
+/**
+ * Reserves a label row at `y` unless it would overlap one already drawn (first come, first
+ * served: Entry and SL are drawn before the targets). Lines are always drawn.
+ */
+export function claimLabelRow(taken: number[], y: number, gap = PLAN_LABEL_GAP): boolean {
+  if (taken.some((t) => Math.abs(t - y) < gap)) return false;
+  taken.push(y);
+  return true;
+}
+
 export class AnalysisOverlay implements ChartOverlay, ISeriesPrimitive {
   readonly id = 'analysis';
   readonly kind = 'analysis' as const;
@@ -236,6 +249,7 @@ export class AnalysisOverlay implements ChartOverlay, ISeriesPrimitive {
         }
       }
     } else {
+      const planLabelYs: number[] = []; // trade-plan labels never overlap each other
       for (const line of this.model.lines) {
         const x1 = this.x(line.from, width, bounds);
         const py = y(line.price);
@@ -250,7 +264,8 @@ export class AnalysisOverlay implements ChartOverlay, ISeriesPrimitive {
         ctx.moveTo(x1, Math.round(py) + 0.5);
         ctx.lineTo(x2, Math.round(py) + 0.5);
         ctx.stroke();
-        if (line.label) {
+        const plan = line.kind.startsWith('plan-');
+        if (line.label && (!plan || claimLabelRow(planLabelYs, py))) {
           ctx.setLineDash([]);
           ctx.fillStyle = color;
           ctx.font = /[؀-ۿ]/.test(line.label) ? ARABIC_FONT : FONT;

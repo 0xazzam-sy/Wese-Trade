@@ -1,10 +1,19 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AnalysisOverlay, readOverlayPalette } from '@/features/analysis/overlays/AnalysisOverlay';
 import { buildOverlayModel } from '@/features/analysis/overlays/overlayModel';
 import { useMarketChart } from '@/features/charts/hooks/useMarketChart';
 import type { ChartController } from '@/features/charts/lib/ChartController';
 import { useSymbolMap } from '@/features/markets/queries';
+import { buildMarkerSpecs, openSignal } from '@/features/signals/chart/chartSignals';
+import { ChartSignalStatus } from '@/features/signals/chart/ChartSignalStatus';
+import { SignalMarkerCard } from '@/features/signals/chart/SignalMarkerCard';
+import {
+  type MarkerPointer,
+  SignalMarkersOverlay,
+  toSeriesMarkers,
+} from '@/features/signals/chart/SignalMarkersOverlay';
+import { useChartSignals } from '@/features/signals/chart/useChartSignals';
 import { cn } from '@/lib/cn';
 import { useAnalysisStore } from '@/stores/analysisStore';
 import { useChartStore } from '@/stores/chartStore';
@@ -50,16 +59,32 @@ export function ChartPanel({ chartId, className }: { chartId: ChartId; className
   );
   const indicator = feedIndicator(appConnection, feed, stream, load);
 
+  // Confirmed forward-test signals of THIS chart (persisted history + live), never derived
+  // from the analysis annotations. The open one drives the trade-plan lines and status card.
+  const signals = useChartSignals(selection.symbol, selection.timeframe, signal);
+  const open = useMemo(() => openSignal(signals), [signals]);
+
   // Backend analysis -> chart overlays (drawing only) and the shared analysis panel.
+  const [pointer, setPointer] = useState<MarkerPointer | null>(null);
   const overlay = useMemo(() => new AnalysisOverlay(), []);
-  const overlays = useMemo(() => [overlay], [overlay]);
+  const markers = useMemo(() => new SignalMarkersOverlay(setPointer), []);
+  const overlays = useMemo(() => [overlay, markers], [overlay, markers]);
   const toggles = useOverlayStore((s) => s.toggles);
   const theme = useThemeStore((s) => s.theme);
   const setAnalysis = useAnalysisStore((s) => s.setAnalysis);
   const setSignal = useAnalysisStore((s) => s.setSignal);
   useEffect(() => {
-    overlay.setModel(buildOverlayModel(analysis, toggles, signal), readOverlayPalette());
-  }, [overlay, analysis, signal, toggles, theme]);
+    overlay.setModel(buildOverlayModel(analysis, toggles, open), readOverlayPalette());
+  }, [overlay, analysis, open, toggles, theme]);
+  const historyReady = load.status === 'ready';
+  useEffect(() => {
+    const chart = controllerRef.current;
+    const specs = historyReady
+      ? buildMarkerSpecs(signals, toggles.signals, (t) => chart?.hasTime(t) ?? false)
+      : [];
+    markers.setMarkers(toSeriesMarkers(specs, readOverlayPalette()));
+  }, [markers, signals, toggles.signals, historyReady, theme]);
+  const pointed = pointer ? signals.find((s) => s.id === pointer.id) : undefined;
   useEffect(() => {
     setAnalysis(chartId, analysis);
   }, [chartId, analysis, setAnalysis]);
@@ -91,6 +116,7 @@ export function ChartPanel({ chartId, className }: { chartId: ChartId; className
       data-timeframe={selection.timeframe}
       data-load={load.status}
       data-analysis={analysis ? (analysis.analysis_ready ? 'ready' : 'not-ready') : 'none'}
+      data-markers={toggles.signals && historyReady ? signals.length : 0}
       className={cn('ns-panel @container flex min-h-0 min-w-0 flex-col overflow-hidden', className)}
     >
       <ChartHeader
@@ -112,8 +138,22 @@ export function ChartPanel({ chartId, className }: { chartId: ChartId; className
           toggleMaximized(chartId);
         }}
       />
+      <ChartSignalStatus
+        timeframe={selection.timeframe}
+        open={open}
+        strategy={signal?.strategy ?? null}
+        precision={meta?.price_precision}
+      />
       <div className="relative min-h-0 flex-1">
         <CandlestickChart onController={onController} overlays={overlays} />
+        {pointed && pointer && (
+          <SignalMarkerCard
+            signal={pointed}
+            x={pointer.x}
+            y={pointer.y}
+            precision={meta?.price_precision}
+          />
+        )}
         <ChartBodyState load={load} symbol={selection.symbol} onRetry={reload} />
       </div>
     </section>

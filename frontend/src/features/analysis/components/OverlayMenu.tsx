@@ -45,7 +45,7 @@ export function OverlayMenu() {
         <div
           role="group"
           aria-label="طبقات التحليل على الرسم"
-          className="bg-surface-strong border-line shadow-pop absolute end-0 top-8 z-30 w-48 rounded-lg border p-1"
+          className="bg-surface-strong border-line shadow-pop absolute end-0 top-8 z-30 w-60 rounded-lg border p-1"
         >
           {OVERLAY_LABELS.map(({ key, label }) => {
             const on = toggles[key];

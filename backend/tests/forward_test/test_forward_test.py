@@ -525,6 +525,30 @@ async def test_api_status_runs_signals_export_and_controls(
     assert (
         await client.get(f"/api/v1/forward-test/runs/{run_id}/signals", params={"side": "short"})
     ).json()["items"] == []
+    # chart markers: exactly the persisted signal, never recomputed; research TFs empty
+    chart = (
+        await client.get(
+            "/api/v1/forward-test/chart-signals", params={"symbol": "btcusdt", "timeframe": "15m"}
+        )
+    ).json()
+    assert chart["signal_capable"] is True and chart["fingerprint"] == "4.2-a03e20f"
+    assert [m["id"] for m in chart["items"]] == [r.signal_id for r in await _rows(database)]
+    marker = chart["items"][0]
+    assert marker["side"] == "long" and marker["strategy_version"] == FROZEN_VERSION
+    assert marker["trigger_time"] == open_time(285)  # the confirmation candle (open time)
+    assert marker["confirmed_time"] == open_time(286)  # its close
+    assert marker["plan"]["targets"][2]["price"] == items[0]["tp3"]
+    later = {"symbol": "BTCUSDT", "timeframe": "15m", "since": marker["confirmed_time"] + 1}
+    assert (await client.get("/api/v1/forward-test/chart-signals", params=later)).json()[
+        "items"
+    ] == []
+    for params in (
+        {"symbol": "BTCUSDT", "timeframe": "5m"},
+        {"symbol": "ETHUSDT", "timeframe": "15m"},
+    ):
+        body = (await client.get("/api/v1/forward-test/chart-signals", params=params)).json()
+        assert body["items"] == []
+        assert body["signal_capable"] is (params["timeframe"] == "15m")
     exported = await client.get(
         f"/api/v1/forward-test/runs/{run_id}/export", params={"format": "json"}
     )

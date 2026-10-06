@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { AnalysisOverlay, readOverlayPalette } from './AnalysisOverlay';
+import { AnalysisOverlay, claimLabelRow, readOverlayPalette } from './AnalysisOverlay';
 import { EMPTY_MODEL } from './overlayModel';
 
 describe('AnalysisOverlay', () => {
@@ -26,5 +26,16 @@ describe('AnalysisOverlay', () => {
     expect(series.detachPrimitive).toHaveBeenCalledWith(overlay);
     overlay.setModel(EMPTY_MODEL, readOverlayPalette()); // detached: no redraw request
     expect(requestUpdate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('claimLabelRow (trade-plan label declutter)', () => {
+  it('skips a label that would overlap one already drawn', () => {
+    const taken: number[] = [];
+    expect(claimLabelRow(taken, 100)).toBe(true); // Entry
+    expect(claimLabelRow(taken, 105)).toBe(false); // too close
+    expect(claimLabelRow(taken, 112)).toBe(true);
+    expect(claimLabelRow(taken, 60)).toBe(true);
+    expect(taken).toEqual([100, 112, 60]);
   });
 });

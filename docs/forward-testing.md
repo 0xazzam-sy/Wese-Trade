@@ -335,3 +335,20 @@ The packaged app keeps its **own permanent** forward test in its app-data databa
 The temporary build-container run above is not migrated and does not become the desktop
 run. Container run 1 stopped observing at about 07:36Z, when the container was recycled,
 exactly as warned above.
+
+## Chart signal UX (v1.0.0)
+
+* BUY / SELL markers on the chart come ONLY from confirmed forward-test signals of the frozen
+  strategy (`wese-trade-forward-4.2-a03e20f1d4`): persisted history from
+  `GET /api/v1/forward-test/chart-signals?symbol=&timeframe=` (restored after a restart, never
+  re-evaluated) merged with the live WebSocket view, de-duplicated by signal id.
+  Structure/liquidity annotations (HH/HL/BOS/CHoCH/OB/FVG…) never create a marker.
+* BUY: ▲ below the confirmation candle, «BUY · شراء». SELL: ▼ above it, «SELL · بيع».
+  Closed signals keep a muted marker; Entry/SL/TP1-3 lines are drawn for the open signal only.
+  No NEUTRAL marker. Hover/click a marker for its details card.
+* 15m / 30m / 1h: signals enabled. 1m / 5m / 10m: analysis only, no directional markers.
+* Each chart has a status strip («شراء — اختبار مباشر» / «بيع — اختبار مباشر» / «محايد») and
+  a «شرح الشارت» legend in Arabic.
+* Deterministic UI fixture: `frontend/src/test/fixtures/frozen-signals.json`, generated from the
+  real engine replay by `python -m tests.signals.ui_fixtures` (a backend test fails on drift).
+  Browser E2E: `scripts/e2e_chart_signals.mjs` (screenshots in `docs/ux/`).

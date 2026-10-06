@@ -173,3 +173,24 @@ def test_stale_feed_turns_the_same_candle_neutral() -> None:
     )
     assert stale.signal_class is SignalClass.NEUTRAL and stale.plan is None
     assert inactive.signal_class is SignalClass.NEUTRAL and inactive.plan is None
+
+
+def test_ui_fixtures_match_engine() -> None:
+    """The chart-marker fixture used by the frontend tests/E2E is exactly what the frozen
+    engine produces (regenerate with `python -m tests.signals.ui_fixtures`)."""
+    from tests.signals.ui_fixtures import OUTPUT, render
+
+    assert OUTPUT.read_text(encoding="utf-8") == render()
+    data = json.loads(render())
+    buy, sell = data["buy"]["signal_at_confirmation"], data["sell"]["signal_at_confirmation"]
+    assert (buy["signal_class"], buy["side"], buy["family"]) == (
+        "BUY",
+        "long",
+        "TREND_CONTINUATION",
+    )
+    assert buy["trigger_time"] == int(datetime(2026, 9, 18, 5, 0, tzinfo=UTC).timestamp())
+    assert buy["score"] == pytest.approx(81.15, abs=0.01)
+    assert (sell["signal_class"], sell["side"]) == ("SELL", "short")
+    assert sell["trigger_time"] == int(datetime(2026, 7, 31, 12, 0, tzinfo=UTC).timestamp())
+    assert sell["score"] == pytest.approx(79.2, abs=0.01)
+    assert all(s["strategy_version"] == FROZEN for k in ("buy", "sell") for s in data[k]["signals"])

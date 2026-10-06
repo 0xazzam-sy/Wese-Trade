@@ -36,6 +36,11 @@ export class ChartController {
     return this.lastTime;
   }
 
+  /** True when a candle with this open time is loaded on the chart. */
+  hasTime(time: number): boolean {
+    return this.times.has(time);
+  }
+
   reset(): void {
     this.times = new Set();
     this.lastTime = null;

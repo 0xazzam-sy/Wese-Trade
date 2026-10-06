@@ -26,14 +26,14 @@ export const DEFAULT_OVERLAYS: OverlayToggles = {
 };
 
 export const OVERLAY_LABELS: { key: OverlayKey; label: string }[] = [
-  { key: 'structure', label: 'الهيكل' },
-  { key: 'liquidity', label: 'السيولة' },
-  { key: 'fvg', label: 'FVG' },
-  { key: 'orderBlocks', label: 'Order Blocks' },
+  { key: 'structure', label: 'هيكل السوق · Market Structure' },
+  { key: 'liquidity', label: 'السيولة · Liquidity' },
+  { key: 'orderBlocks', label: 'مناطق الأوامر · Order Blocks' },
+  { key: 'fvg', label: 'فجوات القيمة · FVG' },
   { key: 'premiumDiscount', label: 'Premium/Discount' },
   { key: 'ote', label: 'OTE' },
-  { key: 'signals', label: 'علامات الإشارات' },
-  { key: 'tradePlan', label: 'خطة الصفقة' },
+  { key: 'signals', label: 'علامات BUY/SELL' },
+  { key: 'tradePlan', label: 'خطة الصفقة · Entry/SL/TP' },
 ];
 
 interface OverlayState {

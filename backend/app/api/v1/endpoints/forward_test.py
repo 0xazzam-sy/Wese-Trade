@@ -19,11 +19,12 @@ from sqlalchemy import select
 
 from app.api.deps import Resources, SessionDep, get_current_user, require_roles
 from app.forward_test import store
-from app.forward_test.candidate import CRITERIA, DISPLAY_NAME, frozen_config
+from app.forward_test.candidate import CRITERIA, DISPLAY_NAME, TIMEFRAMES, frozen_config
 from app.forward_test.metrics import assess, closed_trades, summary
 from app.forward_test.service import DISCLAIMER_AR, STATUS_AR, ForwardTestService
 from app.models.forward_test import ForwardTestRun
 from app.models.user import UserRole
+from app.signal_engine.serialize import signal_payload
 
 router = APIRouter(
     prefix="/forward-test", tags=["forward-test"], dependencies=[Depends(get_current_user)]
@@ -105,6 +106,34 @@ async def forward_status(session: SessionDep, service: Service) -> dict[str, Any
         "closed_trades": len(closed),
         "net_expectancy_r": round(sum(net) / len(net), 4) if net else None,
         "minimum_required_trades": run.minimum_required_trades,
+    }
+
+
+@router.get("/chart-signals")
+async def chart_signals(
+    session: SessionDep,
+    service: Service,
+    symbol: Annotated[str, Query(min_length=1, max_length=32)],
+    timeframe: str,
+    since: Annotated[int | None, Query(ge=0)] = None,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 500,
+) -> dict[str, Any]:
+    """Persisted confirmed forward-test signals of one chart stream (every authenticated
+    user: the same signals the live chart receives). Only the frozen strategy version and
+    only signal-capable timeframes; research/backtest trades are never returned here."""
+    sym = symbol.strip().upper()
+    if timeframe not in TIMEFRAMES:
+        return {"symbol": sym, "timeframe": timeframe, "signal_capable": False, "items": []}
+    signals = await store.chart_signals(
+        session, service.version, sym, timeframe, since=since, limit=limit
+    )
+    return {
+        "symbol": sym,
+        "timeframe": timeframe,
+        "signal_capable": True,
+        "strategy_version": service.version,
+        "fingerprint": service.fingerprint,
+        "items": [signal_payload(s) for s in signals],
     }
 
 

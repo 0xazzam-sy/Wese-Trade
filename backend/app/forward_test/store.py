@@ -184,6 +184,29 @@ async def load_signals(session: AsyncSession, run_id: int) -> list[Signal]:
     return [thaw(r.frozen, r.lifecycle) for r in rows]
 
 
+async def chart_signals(
+    session: AsyncSession,
+    strategy_version: str,
+    symbol: str,
+    timeframe: str,
+    *,
+    since: int | None = None,
+    limit: int = 500,
+) -> list[Signal]:
+    """Persisted CONFIRMED forward-test signals of one stream (oldest first), for chart
+    markers. Read straight from persistence: nothing is re-evaluated or reconstructed."""
+    query = select(ForwardTestSignal).where(
+        ForwardTestSignal.strategy_version == strategy_version,
+        ForwardTestSignal.symbol == symbol,
+        ForwardTestSignal.timeframe == timeframe,
+    )
+    if since is not None:
+        query = query.where(ForwardTestSignal.confirmed_at >= ts(since))
+    query = query.order_by(ForwardTestSignal.confirmed_at.desc(), ForwardTestSignal.id.desc())
+    rows = list((await session.execute(query.limit(limit))).scalars())
+    return [thaw(r.frozen, r.lifecycle) for r in reversed(rows)]
+
+
 async def cursors(session: AsyncSession, run_id: int) -> dict[tuple[str, str], int]:
     rows = (
         await session.execute(select(ForwardTestCursor).where(ForwardTestCursor.run_id == run_id))

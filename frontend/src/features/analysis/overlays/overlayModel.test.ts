@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import { DEFAULT_OVERLAYS, type OverlayToggles } from '@/stores/overlayStore';
 import { notReady, readySnapshot } from '@/test/analysisFixture';
-import { evaluation, PLAN, signal, view } from '@/test/signalFixture';
+import { PLAN, signal } from '@/test/signalFixture';
 
-import { buildOverlayModel, signalOverlay } from './overlayModel';
+import { buildOverlayModel, tradePlanLines } from './overlayModel';
 
 const ALL_ON: OverlayToggles = {
   structure: true,
@@ -78,74 +78,55 @@ describe('buildOverlayModel', () => {
   });
 });
 
-describe('signalOverlay', () => {
-  it('draws a confirmed marker with class and score, plus Entry/SL/TP lines', () => {
-    const active = signal();
-    const out = signalOverlay(view({ active, lastConfirmed: active }), ALL_ON, null);
-    expect(out.labels).toHaveLength(1);
-    expect(out.labels[0]).toMatchObject({ text: 'شراء 78', tone: 'bull', faded: false });
-    const kinds = out.lines.map((l) => [l.kind, l.price, l.label]);
-    expect(kinds).toEqual([
-      ['plan-entry', 100, 'دخول'],
-      ['plan-stop', 98, 'وقف الخسارة'],
-      ['plan-target', 102, 'TP1'],
-      ['plan-target', 103.5, 'TP2'],
-      ['plan-target', 106, 'TP3'],
+describe('tradePlanLines', () => {
+  it('draws Entry/SL/TP1-3 of the open signal with Arabic labels', () => {
+    const lines = tradePlanLines(signal(), ALL_ON);
+    expect(lines.map((l) => [l.kind, l.price, l.label])).toEqual([
+      ['plan-entry', 100, 'الدخول ENTRY'],
+      ['plan-stop', 98, 'وقف الخسارة SL'],
+      ['plan-target', 102, 'الهدف 1 TP1'],
+      ['plan-target', 103.5, 'الهدف 2 TP2'],
+      ['plan-target', 106, 'الهدف 3 TP3'],
     ]);
+    expect(lines.every((l) => l.from === signal().trigger_time && l.to === null)).toBe(true);
   });
 
-  it('fades hit targets and closed signals; draws no plan for closed signals', () => {
-    const closed = signal({
-      id: 'old',
-      state: 'stopped',
-      signal_class: 'STRONG_SELL',
-      side: 'short',
-    });
-    const out = signalOverlay(view({ lastClosed: closed }), ALL_ON, null);
-    expect(out.labels[0]).toMatchObject({ text: 'بيع قوي 78', faded: true, position: 'above' });
-    expect(out.lines).toEqual([]);
-    const hit = signalOverlay(view({ active: signal({ targets_hit: 1 }) }), ALL_ON, null);
-    expect(hit.lines.find((l) => l.label === 'TP1')?.faded).toBe(true);
-    expect(hit.lines.find((l) => l.label === 'TP2')?.faded).toBe(false);
-  });
-
-  it('draws a developing hypothesis faded with "؟" and never as plan lines', () => {
-    const dev = evaluation({ developing: true, signal_class: 'BUY', side: 'long', plan: PLAN });
-    const out = signalOverlay(view({ developing: dev }), ALL_ON, 1_700_000_900);
-    expect(out.labels).toEqual([
-      expect.objectContaining({ text: 'شراء؟', faded: true, time: 1_700_000_900 }),
-    ]);
-    expect(out.lines).toEqual([]);
+  it('fades hit targets; draws nothing without an open signal', () => {
+    const hit = tradePlanLines(signal({ targets_hit: 1 }), ALL_ON);
+    expect(hit.find((l) => l.label === 'الهدف 1 TP1')?.faded).toBe(true);
+    expect(hit.find((l) => l.label === 'الهدف 2 TP2')?.faded).toBe(false);
+    expect(tradePlanLines(null, ALL_ON)).toEqual([]);
   });
 
   it('draws a zone entry as edges until filled', () => {
     const plan = { ...PLAN, entry_model: 'ZONE_ENTRY' as const, entry_low: 99, entry_high: 100.5 };
-    const out = signalOverlay(
-      view({ active: signal({ plan, state: 'confirmed', entry_price: null }) }),
-      ALL_ON,
-      null,
-    );
-    expect(out.lines.filter((l) => l.kind === 'plan-entry').map((l) => l.price)).toEqual([
+    const lines = tradePlanLines(signal({ plan, state: 'confirmed', entry_price: null }), ALL_ON);
+    expect(lines.filter((l) => l.kind === 'plan-entry').map((l) => l.price)).toEqual([
       100, 99, 100.5,
     ]);
   });
 
-  it('respects the signals and tradePlan toggles', () => {
-    const v = view({ active: signal() });
-    expect(signalOverlay(v, ALL_OFF, null)).toEqual({ lines: [], labels: [] });
-    expect(signalOverlay(v, { ...ALL_OFF, signals: true }, null).lines).toEqual([]);
-    expect(signalOverlay(v, { ...ALL_OFF, tradePlan: true }, null).labels).toEqual([]);
+  it('respects the tradePlan toggle', () => {
+    expect(tradePlanLines(signal(), { ...ALL_ON, tradePlan: false })).toEqual([]);
   });
 
-  it('is merged into the analysis model', () => {
-    const model = buildOverlayModel(readySnapshot(), ALL_OFF, view({ active: signal() }));
+  it('is merged into the analysis model, which never draws BUY/SELL labels itself', () => {
+    const model = buildOverlayModel(readySnapshot(), ALL_OFF, signal());
     expect(model.lines).toEqual([]);
-    const on = buildOverlayModel(readySnapshot(), ALL_ON, view({ active: signal() }));
+    const on = buildOverlayModel(readySnapshot(), ALL_ON, signal());
     expect(on.lines.some((l) => l.kind === 'plan-stop')).toBe(true);
-    expect(buildOverlayModel(null, ALL_ON, view({ active: signal() }))).toEqual({
-      zones: [],
-      lines: [],
-      labels: [],
-    });
+    expect(on.labels.some((l) => /BUY|SELL|شراء|بيع/.test(l.text))).toBe(false);
+    // plan lines do not depend on the analysis being ready
+    const loading = buildOverlayModel(null, ALL_ON, signal());
+    expect(loading.zones).toEqual([]);
+    expect(loading.labels).toEqual([]);
+    expect(loading.lines.map((l) => l.kind)).toEqual([
+      'plan-entry',
+      'plan-stop',
+      'plan-target',
+      'plan-target',
+      'plan-target',
+    ]);
+    expect(buildOverlayModel(null, ALL_ON, null)).toEqual({ zones: [], lines: [], labels: [] });
   });
 });

@@ -18,12 +18,34 @@ describe('OverlayMenu', () => {
     expect(ote).toHaveAttribute('aria-checked', 'false');
     fireEvent.click(ote);
     expect(useOverlayStore.getState().toggles.ote).toBe(true);
-    const structure = screen.getByRole('menuitemcheckbox', { name: /الهيكل/ });
+    const structure = screen.getByRole('menuitemcheckbox', { name: /هيكل السوق/ });
     expect(structure).toHaveAttribute('aria-checked', String(DEFAULT_OVERLAYS.structure));
     fireEvent.click(structure);
     expect(useOverlayStore.getState().toggles.structure).toBe(false);
     expect(localStorage.getItem('wesetrade.overlays')).toContain('"ote":true');
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(screen.queryByRole('menuitemcheckbox', { name: /OTE/ })).toBeNull();
+  });
+});
+
+describe('OverlayMenu layer groups', () => {
+  it('lists every layer group, including BUY/SELL markers and the trade plan', () => {
+    render(<OverlayMenu />);
+    fireEvent.click(screen.getByRole('button', { name: 'طبقات التحليل' }));
+    for (const name of [
+      /Market Structure/,
+      /Liquidity/,
+      /Order Blocks/,
+      /FVG/,
+      /Premium\/Discount/,
+      /علامات BUY\/SELL/,
+      /Entry\/SL\/TP/,
+    ]) {
+      expect(screen.getByRole('menuitemcheckbox', { name })).toBeInTheDocument();
+    }
+    const markers = screen.getByRole('menuitemcheckbox', { name: /علامات BUY\/SELL/ });
+    const before = useOverlayStore.getState().toggles.signals;
+    fireEvent.click(markers);
+    expect(useOverlayStore.getState().toggles.signals).toBe(!before);
   });
 });
