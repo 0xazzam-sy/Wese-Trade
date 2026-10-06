@@ -50,7 +50,11 @@ jobs:
             if ! python scripts/desktop_smoke.py "$exe" > "smoke-$i.log" 2>&1; then
               fails=$((fails+1))
               echo "--- FAILED pair $i"
-              grep -v '^ *"' "smoke-$i.log" | tail -150
+              grep -v '^ *"' "smoke-$i.log" | tail -200
+              echo "--- desktop.log of failed pair $i"
+              tail -40 "$HOME/Library/Application Support/WeseTrade/logs/desktop.log" || true
+              echo "--- backend logs of failed pair $i"
+              tail -15 "$HOME/Library/Application Support/WeseTrade/logs/backend-stderr.log" 2>/dev/null || true
             fi
             ls -la /tmp/*_si.sock 2>/dev/null || true
           done

@@ -56,6 +56,7 @@ def clean_env(offline: bool) -> dict[str, str]:
         "HTTPS_PROXY",
         "HTTP_PROXY",
         "NO_PROXY",
+        "RUST_BACKTRACE",  # diagnostics only (never set by default)
     }
     env = {k: v for k, v in os.environ.items() if k.upper() in keep}
     if os.name == "nt":
