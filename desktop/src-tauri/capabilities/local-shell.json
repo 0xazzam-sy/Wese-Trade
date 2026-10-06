@@ -5,6 +5,7 @@
   "windows": ["main"],
   "permissions": [
     "allow-startup-status",
+    "allow-app-location",
     "allow-restart-backend",
     "allow-open-logs-dir",
     "allow-restart-app",

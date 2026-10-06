@@ -4,6 +4,7 @@ fn main() {
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "startup_status",
+            "app_location",
             "restart_backend",
             "open_data_dir",
             "open_logs_dir",

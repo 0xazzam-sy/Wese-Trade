@@ -30,13 +30,25 @@
     }
   }
 
+  // One request at a time, and the page navigates only from a completed response: a
+  // navigation while an IPC request is in flight can abort the app on macOS.
   function poll() {
     invoke('startup_status').then(function (status) {
+      if (status.state === 'ready') {
+        invoke('app_location').then(function (url) {
+          if (url) window.location.replace(url);
+          else setTimeout(poll, 400);
+        }, function () {
+          setTimeout(poll, 1000);
+        });
+        return;
+      }
       render(status);
-      if (status.state === 'starting' || status.state === 'stopping' || status.state === 'stopped') {
+      if (status.state === 'crashed') {
+        setTimeout(poll, 1000); // follows a service restart
+      } else if (status.state !== 'failed') {
         setTimeout(poll, 400);
       }
-      // "ready": the shell navigates this window to the app itself.
     }, function () {
       setTimeout(poll, 1000);
     });

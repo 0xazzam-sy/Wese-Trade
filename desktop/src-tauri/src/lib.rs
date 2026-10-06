@@ -132,9 +132,10 @@ pub(crate) fn start_backend<R: Runtime>(app: AppHandle<R>) {
         let state = app.state::<AppState>();
         match state.backend.start() {
             Ok(port) => {
-                if let Some(window) = app.get_webview_window(MAIN) {
-                    let _ = window.navigate(app_url(&state, port));
-                }
+                // No navigation from here: the startup page navigates itself once its
+                // `startup_status` poll reports ready (see ui/shell.js). Navigating the
+                // webview from this thread could cancel an IPC request still in flight;
+                // on macOS, answering a cancelled WebKit scheme task aborts the process.
                 spawn_monitor(app.clone());
                 if let Some(smoke) = state.smoke.clone() {
                     if smoke.begin() {
@@ -178,6 +179,15 @@ fn spawn_monitor<R: Runtime>(app: AppHandle<R>) {
 #[tauri::command]
 fn startup_status(state: State<'_, AppState>) -> Status {
     state.backend.status()
+}
+
+/// Where the startup page should go once the backend is ready (None while not ready).
+#[tauri::command]
+fn app_location(state: State<'_, AppState>) -> Option<String> {
+    match state.backend.status() {
+        Status::Ready { port } => Some(app_url(&state, port).to_string()),
+        _ => None,
+    }
 }
 
 #[tauri::command]
@@ -367,6 +377,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             startup_status,
+            app_location,
             restart_backend,
             open_data_dir,
             open_logs_dir,
