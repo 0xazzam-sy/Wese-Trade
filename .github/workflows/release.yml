@@ -56,6 +56,8 @@ jobs:
           ref: ${{ inputs.create_tag_at }}
           fetch-depth: 0
       - name: Create the annotated tag at the validated commit (never moves an existing tag)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
           sha="${{ inputs.create_tag_at }}"
@@ -65,10 +67,13 @@ jobs:
           if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
             echo "::error::tag $TAG already exists"; exit 1
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "$TAG" -m "Wese Trade $TAG (strategy wese-trade-forward-4.2-a03e20f1d4)" "$sha"
-          git push origin "refs/tags/$TAG"
+          # REST API (an annotated tag object + its ref): a git push of a ref whose history
+          # touches .github/workflows is refused for the workflow token.
+          tag_sha="$(gh api -X POST "repos/$GITHUB_REPOSITORY/git/tags" \
+            -f tag="$TAG" -f object="$sha" -f type=commit \
+            -f message="Wese Trade $TAG (strategy wese-trade-forward-4.2-a03e20f1d4)" -q .sha)"
+          gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$TAG" -f sha="$tag_sha" >/dev/null
+          [ "$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" -q .sha)" = "$sha" ]
           echo "created $TAG at $sha"
 
   build:
