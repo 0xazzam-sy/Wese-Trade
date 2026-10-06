@@ -1,0 +1,58 @@
+# Manual diagnostic: launch the macOS release build repeatedly (smoke mode) with full
+# backtraces to catch an intermittent startup abort ("panic in a function that cannot
+# unwind" on a tokio worker). Not part of CI or releases.
+name: macOS launch diagnostics
+
+on:
+  workflow_dispatch:
+    inputs:
+      launches:
+        description: "Number of smoke launch pairs"
+        default: "10"
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: macos-14
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+      - name: Build (same as release, unsigned, no updater artifacts)
+        shell: bash
+        run: |
+          python -m pip install -r backend/requirements-build.txt
+          python scripts/build_sidecar.py
+          cd desktop && npm ci
+          npx tauri build --target aarch64-apple-darwin --bundles app --config '{"bundle":{"createUpdaterArtifacts":false}}'
+      - name: Repeated launches with backtraces
+        shell: bash
+        env:
+          RUST_BACKTRACE: full
+          PYTHONIOENCODING: utf-8
+        run: |
+          app="$(ls -d desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app | head -1)"
+          exe="$app/Contents/MacOS/wese-trade"
+          fails=0
+          for i in $(seq 1 ${{ inputs.launches }}); do
+            echo "=== pair $i"
+            rm -rf "$HOME/Library/Application Support/WeseTrade"  # each pair starts fresh
+            if ! python scripts/desktop_smoke.py "$exe" > "smoke-$i.log" 2>&1; then
+              fails=$((fails+1))
+              echo "--- FAILED pair $i"
+              grep -v '^ *"' "smoke-$i.log" | tail -150
+            fi
+            ls -la /tmp/*_si.sock 2>/dev/null || true
+          done
+          echo "failed pairs: $fails"
+          tail -50 "$HOME/Library/Application Support/WeseTrade/logs/desktop.log" || true
