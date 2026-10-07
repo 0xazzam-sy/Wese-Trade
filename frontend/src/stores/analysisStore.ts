@@ -11,6 +11,9 @@ interface AnalysisState {
   signals: Record<ChartId, SignalView | null>;
   /** Which chart the analysis panel describes. Not persisted. */
   focused: ChartId;
+  /** Chart candles are (re)loading after a symbol/timeframe change (UI feedback only). */
+  loading: Record<ChartId, boolean>;
+  setLoading: (chart: ChartId, loading: boolean) => void;
   setAnalysis: (chart: ChartId, snapshot: AnalysisSnapshot | null) => void;
   setSignal: (chart: ChartId, view: SignalView | null) => void;
   setFocused: (chart: ChartId) => void;
@@ -20,6 +23,12 @@ export const useAnalysisStore = create<AnalysisState>()((set) => ({
   byChart: { primary: null, secondary: null },
   signals: { primary: null, secondary: null },
   focused: 'primary',
+  loading: { primary: false, secondary: false },
+  setLoading: (chart, loading) => {
+    set((s) =>
+      s.loading[chart] === loading ? s : { loading: { ...s.loading, [chart]: loading } },
+    );
+  },
   setSignal: (chart, view) => {
     set((s) => ({ signals: { ...s.signals, [chart]: view } }));
   },

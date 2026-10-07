@@ -311,6 +311,7 @@ export function SignalPanel() {
           className="border-line flex w-48 shrink-0 flex-col gap-1.5 border-e pe-3 @5xl:w-60"
         >
           <div
+            key={`${x.decision}|${context.symbol}|${context.timeframe}`}
             data-testid="signal-badge"
             data-decision={x.decision}
             className={cn(

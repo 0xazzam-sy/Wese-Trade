@@ -74,6 +74,11 @@ export function ChartPanel({ chartId, className }: { chartId: ChartId; className
   const setAnalysis = useAnalysisStore((s) => s.setAnalysis);
   const setSignal = useAnalysisStore((s) => s.setSignal);
   const setFocused = useAnalysisStore((s) => s.setFocused);
+  const setLoading = useAnalysisStore((s) => s.setLoading);
+  const focusedChart = useAnalysisStore((s) => s.focused);
+  useEffect(() => {
+    setLoading(chartId, load.status === 'loading');
+  }, [chartId, load.status, setLoading]);
   useEffect(() => {
     overlay.setModel(buildOverlayModel(analysis, toggles, open), readOverlayPalette());
   }, [overlay, analysis, open, toggles, theme]);
@@ -122,7 +127,11 @@ export function ChartPanel({ chartId, className }: { chartId: ChartId; className
         setFocused(chartId); // the analysis panel describes the chart the user works with
       }}
       data-markers={toggles.signals && historyReady ? signals.length : 0}
-      className={cn('ns-panel @container flex min-h-0 min-w-0 flex-col overflow-hidden', className)}
+      data-focused={focusedChart === chartId}
+      className={cn(
+        'ns-panel ns-chart-panel @container flex min-h-0 min-w-0 flex-col overflow-hidden',
+        className,
+      )}
     >
       <ChartHeader
         title={TITLES[chartId]}

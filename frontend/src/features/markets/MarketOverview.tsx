@@ -43,6 +43,7 @@ export function MarketOverview() {
   const selected = useChartStore((s) => s.charts.primary.symbol);
   const setSymbol = useChartStore((s) => s.setSymbol);
   const setFocused = useAnalysisStore((s) => s.setFocused);
+  const primaryLoading = useAnalysisStore((s) => s.loading.primary);
 
   const rows = useMemo<Row[]>(() => {
     const tickerMap = new Map((tickers.data?.items ?? []).map((t) => [t.symbol, t]));
@@ -136,13 +137,21 @@ export function MarketOverview() {
                     setFocused('primary'); // the analysis panel follows the chart that changed
                   }}
                   title="عرض في الرسم الرئيسي"
+                  aria-current={symbol.symbol === selected ? 'true' : undefined}
+                  data-loading={symbol.symbol === selected && primaryLoading ? 'true' : undefined}
                   className={cn(
-                    'hover:bg-surface-hover grid h-full w-full grid-cols-[1.1fr_1.1fr_0.8fr_0.9fr] items-center gap-1 px-3 text-start',
-                    symbol.symbol === selected && 'bg-accent-soft',
+                    'ns-market-row grid h-full w-full grid-cols-[1.1fr_1.1fr_0.8fr_0.9fr] items-center gap-1 px-3 text-start',
                   )}
                 >
-                  <span className="ns-ltr truncate text-start text-xs font-semibold">
+                  <span className="ns-ltr flex min-w-0 items-center gap-1.5 truncate text-start text-xs font-semibold">
                     {symbol.base_asset}
+                    {symbol.symbol === selected && primaryLoading && (
+                      <span
+                        role="status"
+                        aria-label={`جارٍ تحميل ${symbol.symbol}`}
+                        className="ns-spinner size-2.5 shrink-0"
+                      />
+                    )}
                   </span>
                   <span className="ns-num text-fg-muted truncate text-start text-xs">
                     {formatPrice(ticker?.last_price, symbol.price_precision)}

@@ -34,7 +34,7 @@ export function ChartBodyState({
   let content;
   if (load.status === 'loading') {
     content = (
-      <div className="flex flex-col items-center gap-3" role="status">
+      <div className="ns-fade-in flex flex-col items-center gap-3" role="status">
         <CandleSkeleton />
         <p className="text-fg-muted text-xs" data-testid="chart-loading">
           جارٍ تحميل بيانات <span className="ns-ltr">{symbol}</span>...
@@ -58,7 +58,7 @@ export function ChartBodyState({
           ? 'جاري تحميل قائمة العقود من OKX.'
           : 'تعذر تحميل بيانات السوق من OKX.';
     content = (
-      <div className="flex flex-col items-center gap-2" data-testid="chart-error">
+      <div className="ns-fade-in flex flex-col items-center gap-2" data-testid="chart-error">
         <EmptyState
           compact
           icon={<AlertTriangle className="size-5" />}
