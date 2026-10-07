@@ -37,6 +37,9 @@ class Config:
     limit: bool = False  # limit at the trigger midpoint instead of market at close
     require: tuple[str, ...] = ()  # extra component flags required (ablation)
     sessions: tuple[int, ...] = ()  # UTC hours excluded (empty = none)
+    regime: bool = False  # LTF-5.1 gate: context strength >= 1 and ATR percentile >= 80
+    time_stop: int = TIME_STOP
+    runner: bool = False  # 1/2 at TP1, 1/2 at TP3 (TP2 skipped)
 
     def key(self) -> str:
         parts = [
@@ -50,6 +53,12 @@ class Config:
             parts.append("req=" + "+".join(self.require))
         if self.sessions:
             parts.append(f"skip_h={len(self.sessions)}")
+        if self.regime:
+            parts.append("regime=trend_hivol")
+        if self.time_stop != TIME_STOP:
+            parts.append(f"time={self.time_stop}")
+        if self.runner:
+            parts.append("runner")
         return " ".join(parts)
 
 
@@ -93,6 +102,8 @@ def passes(c: Candidate, cfg: Config) -> bool:
         return False
     flags = c.flags()
     if any(not flags[name] for name in cfg.require):
+        return False
+    if cfg.regime and (c.ctx_strength < 1.0 or c.atr_pct < 80):
         return False
     return not (cfg.sessions and c.hour in cfg.sessions)
 
@@ -159,14 +170,21 @@ def simulate(
         if not fill_bar:
             moved = False
             while hit < 3 and ((h[j] >= tps[hit]) if side == 1 else (lo[j] <= tps[hit])):
-                frac = 1 / 3 if hit < 2 else remaining
+                if cfg.runner and hit == 1:  # runner: TP2 is not a partial exit
+                    hit += 1
+                    continue
+                frac = (
+                    (0.5 if hit == 0 else remaining)
+                    if cfg.runner
+                    else (1 / 3 if hit < 2 else remaining)
+                )
                 exits.append((frac, tps[hit], f"tp{hit + 1}"))
                 remaining -= frac
                 hit += 1
                 moved = True
             if moved and cfg.be and hit >= 1:
                 live_stop = entry  # applies from the next candle on
-        if remaining > 1e-9 and j - start + 1 >= TIME_STOP:
+        if remaining > 1e-9 and j - start + 1 >= cfg.time_stop:
             exits.append((remaining, cl[j], "time"))
             remaining = 0
             break

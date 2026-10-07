@@ -231,3 +231,14 @@ Net = after fees and slippage, base costs. 12 symbols. Development spans 541 day
   "no robust lower-timeframe edge", and 1m/5m/10m stay «تحليل فقط».
 - Validation and holdout are read only for a timeframe that passes this bar. The §6 gates apply
   unchanged.
+
+## 10. LTF-5.1 development results (pre-registered in §9, development segment only)
+
+| TF | Configs | Best net E | Best gross E | Development bar (net ≥ +0.05, gross ≥ +0.10, anchors > 0 and others > 0) |
+| --- | ---: | ---: | ---: | --- |
+| 5m | 8 | −0.026 (n = 917, PF 0.95) | +0.037 | **failed by all 8**: anchors and others disagree in sign; gross far below +0.10 |
+| 10m | 8 | −0.023 (n = 855, PF 0.96) | +0.034 | **failed by all 8**: anchors −0.11 R in every configuration |
+
+The trend + volatility-expansion gate halves the losses, but no configuration is positive after
+costs. **Per §9, no further iteration is run for 5m/10m in Phase 5.** The validation and holdout
+segments were **not read** for any configuration, and the holdout stays sealed.

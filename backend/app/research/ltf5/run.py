@@ -76,6 +76,51 @@ def grid_configs(tf: str) -> list[tuple[str, sim.Config]]:
     return out
 
 
+def grid_configs_51(tf: str) -> list[tuple[str, sim.Config]]:
+    """LTF-5.1 pre-registered grid (docs/research-ltf.md §9)."""
+    out = []
+    for ctx_tf, time_stop, runner in itertools.product(CONTEXTS[tf], (48, 96), (False, True)):
+        cfg = sim.Config(ctx=True, floor=0.10, regime=True, time_stop=time_stop, runner=runner)
+        out.append((ctx_tf, cfg))
+    return out
+
+
+ANCHORS = ("BTCUSDT", "ETHUSDT", "SOLUSDT")
+
+
+def cmd_grid51(tf: str) -> dict[str, Any]:
+    markets = [Market(s, tick, tf) for s, tick in members()]
+    days = span_days(markets, 0, DEV_END_MS)
+    results: dict[str, dict[str, Any]] = {}
+    verdict: dict[str, Any] = {"pass": []}
+    for c, cfg in grid_configs_51(tf):
+        trades = trades_for(markets, c, cfg, 0, DEV_END_MS)
+        r = metrics.summary(trades, days)
+        anchor = [t for t in trades if t.symbol in ANCHORS]
+        other = [t for t in trades if t.symbol not in ANCHORS]
+        r["anchors"] = metrics.summary(anchor)
+        r["others"] = metrics.summary(other)
+        results[label(c, cfg)] = r
+        ok = (
+            r.get("trades", 0) >= MIN_DEV_TRADES
+            and r["net_e"] >= 0.05
+            and r["gross_e"] >= 0.10
+            and r["anchors"].get("net_e", -1) > 0
+            and r["others"].get("net_e", -1) > 0
+        )
+        if ok:
+            verdict["pass"].append(label(c, cfg))
+        print(
+            f"  {label(c, cfg):80} n={r.get('trades', 0):5} gross={r.get('gross_e', 0):+.3f} "
+            f"net={r.get('net_e', 0):+.3f} pf={r.get('pf')} anchors={r['anchors'].get('net_e')} "
+            f"others={r['others'].get('net_e')}"
+        )
+    out = {"tf": tf, "segment": "dev", "iteration": "5.1", "results": results, "verdict": verdict}
+    _save(f"{tf}_dev_grid51.json", out)
+    print("  5.1 development bar passed by:", verdict["pass"] or "NONE")
+    return out
+
+
 def trades_for(
     markets: Sequence[Market], ctx_tf: str, cfg: sim.Config, start: int, end: int
 ) -> list[sim.Trade]:
@@ -196,11 +241,13 @@ def cmd_audit() -> None:
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("command", choices=["audit", "grid"])
+    p.add_argument("command", choices=["audit", "grid", "grid51"])
     p.add_argument("--tf", choices=list(CONTEXTS), default="5m")
     a = p.parse_args()
     if a.command == "audit":
         cmd_audit()
+    elif a.command == "grid51":
+        cmd_grid51(a.tf)
     else:
         cmd_grid(a.tf)
 
