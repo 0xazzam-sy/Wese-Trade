@@ -28,6 +28,9 @@ from app.research.store import ResearchStore
 # Research depth (days back from now) per native timeframe. 1m only for the anchors.
 DEPTH_DAYS = {Timeframe.M5: 365, Timeframe.M15: 365, Timeframe.M30: 365, Timeframe.H1: 730}
 ANCHOR_DEPTH_DAYS = {Timeframe.M1: 180, **DEPTH_DAYS}
+# Phase 5 lower-timeframe research: 2 years of 5m (15m/30m/1h context and 10m are
+# aggregated from it) and 365 days of 1m, for EVERY universe member (not only anchors).
+LTF_DEPTH_DAYS = {Timeframe.M5: 730, Timeframe.M1: 365}
 SOURCE = "okx:history-candles"
 
 
@@ -136,7 +139,7 @@ async def fetch_funding(
     print(f"{member.symbol:>14} funding: +{total}")
 
 
-async def main(select: bool, skip_import: bool) -> None:
+async def main(select: bool, skip_import: bool, ltf: bool = False) -> None:
     # Slower than the live client: history endpoints have tighter per-endpoint limits.
     rest = OkxRestClient(get_settings().okx_rest_url, rate_per_second=5.0, burst=5)
     store = ResearchStore()
@@ -161,10 +164,14 @@ async def main(select: bool, skip_import: bool) -> None:
 
         async def one(member: universe.UniverseMember) -> None:
             async with gate:
-                depth = ANCHOR_DEPTH_DAYS if member.anchor else DEPTH_DAYS
+                if ltf:
+                    depth = LTF_DEPTH_DAYS
+                else:
+                    depth = ANCHOR_DEPTH_DAYS if member.anchor else DEPTH_DAYS
                 for tf, days in depth.items():
                     await ensure(store, rest, member.symbol, tf, days, now_ms)
-                await fetch_funding(store, rest, member)
+                if not ltf:
+                    await fetch_funding(store, rest, member)
 
         await asyncio.gather(*(one(m) for m in universe.load()))
     finally:
@@ -176,5 +183,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--select", action="store_true")
     parser.add_argument("--skip-import", action="store_true")
+    parser.add_argument("--ltf", action="store_true", help="Phase 5 lower-timeframe depth")
     args = parser.parse_args()
-    asyncio.run(main(args.select, args.skip_import))
+    asyncio.run(main(args.select, args.skip_import, args.ltf))
