@@ -1,17 +1,11 @@
-import { Activity, Bug, Info, ListTree } from 'lucide-react';
+import { Bug, Info, ListTree } from 'lucide-react';
 import { useState } from 'react';
 
 import { IconButton } from '@/components/ui/IconButton';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { AnalysisDebug } from '@/features/analysis/components/AnalysisDebug';
-import { MtfPanel } from '@/features/analysis/components/MtfPanel';
 import { NOT_READY_AR } from '@/features/analysis/lib/labels';
-import {
-  panelMetrics,
-  timeframeLabel,
-  type PanelMetric,
-  type Tone,
-} from '@/features/analysis/lib/panelMetrics';
+import { timeframeLabel } from '@/features/analysis/lib/panelMetrics';
 import { useSymbolMap } from '@/features/markets/queries';
 import { cn } from '@/lib/cn';
 import { formatPrice } from '@/lib/marketFormat';
@@ -22,14 +16,16 @@ import type { AnalysisSnapshot } from '@/types/analysis';
 import type { StrategyInfo, TradePlanDTO } from '@/types/signal';
 
 import { SignalDetails } from './components/SignalDetails';
-import { signalDisplay, type SignalDisplay } from './lib/display';
 import {
-  formatScore,
-  RISK_NOTE,
-  SIGNAL_CLASS_AR,
-  SIGNAL_CLASS_STYLE,
-  STATE_AR,
-} from './lib/labels';
+  ANALYSIS_ONLY_TEXT,
+  explain,
+  SCORE_LABEL,
+  SCORE_TOOLTIP,
+  type CategoryRow,
+  type Decision,
+  type ExplainTone,
+} from './lib/explain';
+import { formatScore, RISK_NOTE, SIGNAL_CLASS_STYLE } from './lib/labels';
 
 interface Metric {
   label: string;
@@ -49,14 +45,6 @@ const PLAN_METRICS: Metric[] = [
 ];
 
 const EMPTY_VALUE = '--';
-
-const TONE_CLASS: Record<Tone, string> = {
-  bull: 'text-bull',
-  bear: 'text-bear',
-  neutral: 'text-fg',
-  warning: 'text-warning',
-  muted: 'text-fg-muted',
-};
 
 const FOCUS_OPTIONS = [
   { value: 'primary', label: 'الرئيسي' },
@@ -140,34 +128,69 @@ function StrategyBadge({ strategy }: { strategy: StrategyInfo }) {
   );
 }
 
-function signalLabel(d: SignalDisplay, forward: boolean): string {
-  if (d.kind === 'none') return 'لا توجد إشارة حالياً';
-  const name = SIGNAL_CLASS_AR[d.signalClass];
-  if (d.kind === 'developing') return `${name} — قيد التشكّل`;
-  // A forward-test BUY/SELL always carries its status: never a trusted recommendation.
-  return forward && d.signalClass !== 'NEUTRAL' ? `${name} — اختبار مباشر` : name;
-}
+const TONE_TEXT: Record<ExplainTone, string> = {
+  positive: 'text-bull',
+  negative: 'text-bear',
+  neutral: 'text-fg',
+};
+const TONE_DOT: Record<ExplainTone, string> = {
+  positive: 'bg-bull',
+  negative: 'bg-bear',
+  neutral: 'bg-fg-subtle/60',
+};
+const DIRECTION_TEXT: Record<string, string> = {
+  bullish: 'text-bull',
+  bearish: 'text-bear',
+  neutral: 'text-fg',
+};
 
-function stateLine(d: SignalDisplay): string | null {
-  if (d.signal) return STATE_AR[d.signal.state];
-  if (d.kind === 'developing') return 'فرضية على شمعة لم تُغلق بعد — ليست إشارة مؤكدة';
-  if (d.kind === 'evaluation' && d.signalClass === 'NEUTRAL') return d.neutralReason;
-  return null;
-}
+const DECISION_STYLE: Record<Decision, string> = {
+  BUY: SIGNAL_CLASS_STYLE.BUY,
+  SELL: SIGNAL_CLASS_STYLE.SELL,
+  NEUTRAL: 'bg-neutral-soft text-fg border-line',
+  ANALYSIS_ONLY: 'bg-transparent text-fg-muted border-dashed border-line-strong',
+};
 
-function AnalysisCell({ metric }: { metric: PanelMetric }) {
+function CategoryCell({ row }: { row: CategoryRow }) {
+  const pts =
+    row.points === null
+      ? null
+      : row.max === null
+        ? row.points.toString()
+        : `${row.points.toString()}/${row.max.toString()}`;
+  const ratio =
+    row.points !== null && row.max ? Math.max(0, Math.min(1, row.points / row.max)) : null;
   return (
-    <div
-      data-metric={metric.key}
-      title={metric.detail ? `${metric.value} — ${metric.detail}` : metric.value}
-      className="bg-sunken border-line flex min-w-0 flex-col gap-0.5 rounded-lg border px-2.5 py-1.5"
+    <li
+      data-category={row.key}
+      data-tone={row.tone}
+      title={`${row.label}: ${row.state} — ${row.explanation}`}
+      className="ns-card-row flex min-w-0 flex-col gap-0.5 rounded-md px-2 py-1"
     >
-      <span className="text-fg-subtle text-2xs truncate">{metric.label}</span>
-      <span className={cn('truncate text-xs font-semibold', TONE_CLASS[metric.tone])}>
-        {metric.value}
-      </span>
-      <span className="text-fg-subtle text-2xs ns-num truncate">{metric.detail ?? ' '}</span>
-    </div>
+      <div className="flex min-w-0 items-center gap-1.5 text-xs">
+        <span aria-hidden className={cn('size-1.5 shrink-0 rounded-full', TONE_DOT[row.tone])} />
+        <span className="text-fg-muted shrink-0">{row.label}</span>
+        <span className={cn('min-w-0 truncate font-semibold', TONE_TEXT[row.tone])}>
+          {row.state}
+        </span>
+        {pts !== null && (
+          <span className="ms-auto flex shrink-0 items-center gap-1">
+            {ratio !== null && (
+              <span className="bg-sunken border-line hidden h-1 w-8 overflow-hidden rounded-full border @5xl:block">
+                <span
+                  className={cn('block h-full', row.tone === 'negative' ? 'bg-bear' : 'bg-accent')}
+                  style={{ width: `${String(Math.round(ratio * 100))}%` }}
+                />
+              </span>
+            )}
+            <span className="ns-num text-fg-subtle text-2xs" data-testid="category-points">
+              {pts}
+            </span>
+          </span>
+        )}
+      </div>
+      <p className="text-fg-subtle text-2xs truncate">{row.explanation}</p>
+    </li>
   );
 }
 
@@ -192,16 +215,16 @@ export function SignalPanel() {
   const symbols = useSymbolMap();
   const [debugOpen, setDebugOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const metrics = panelMetrics(snapshot);
   const status = statusText(snapshot);
-  const display = signalDisplay(view);
   const strategy = view?.strategy ?? null;
-  const developing = display.kind === 'developing';
-  const plan = display.signal?.plan ?? (developing ? (display.evaluation?.plan ?? null) : null);
-  const precision = snapshot ? symbols.get(snapshot.symbol)?.price_precision : undefined;
+  const x = explain(snapshot, view, strategy);
+  const display = x.display;
+  const confirmed = x.decision === 'BUY' || x.decision === 'SELL';
+  const plan = confirmed ? (display.signal?.plan ?? null) : null;
+  const precision = symbols.get(context.symbol)?.price_precision;
   const values = planValues(plan, precision);
-  const state = stateLine(display);
-  const scoreValue = display.score === null ? 0 : Math.round(display.score);
+  const scoreValue = x.score === null ? 0 : Math.round(x.score);
+  const forward = strategy?.forward_test === true || Boolean(strategy?.fingerprint);
 
   return (
     <section
@@ -209,6 +232,7 @@ export function SignalPanel() {
       data-analysis-state={snapshot ? (snapshot.analysis_ready ? 'ready' : 'not-ready') : 'none'}
       data-signal-kind={display.kind}
       data-signal-class={display.signalClass}
+      data-decision={x.decision}
       className="ns-panel @container relative shrink-0 p-3"
     >
       {detailsOpen && (
@@ -236,6 +260,7 @@ export function SignalPanel() {
             {status}
           </span>
         )}
+        {strategy && <StrategyBadge strategy={strategy} />}
         <div className="ms-auto flex items-center gap-1.5">
           <SegmentedControl
             size="sm"
@@ -269,76 +294,118 @@ export function SignalPanel() {
       </header>
 
       <div className="flex gap-3">
-        <div className="border-line flex w-40 shrink-0 flex-col gap-2 border-e pe-3 @5xl:w-52">
-          <div className="flex items-center gap-2">
-            <Activity className="text-accent size-4" />
-            <h3 className="text-sm font-semibold">الإشارة</h3>
-            {strategy && <StrategyBadge strategy={strategy} />}
-          </div>
+        {/* Decision summary: الاتجاه؟ هل في صفقة؟ ليش؟ */}
+        <div
+          data-testid="decision-summary"
+          className="border-line flex w-52 shrink-0 flex-col gap-2 border-e pe-3 @5xl:w-64"
+        >
           <div
             data-testid="signal-badge"
+            data-decision={x.decision}
             className={cn(
-              'rounded-lg border px-3 py-2 text-center text-sm font-semibold',
-              display.kind === 'none'
-                ? 'bg-neutral-soft text-fg-muted border-transparent font-medium'
-                : SIGNAL_CLASS_STYLE[display.signalClass],
-              developing && 'animate-pulse border-dashed border-warning/60',
+              'ns-decision rounded-lg border px-3 py-2 text-center text-base font-bold',
+              DECISION_STYLE[x.decision],
             )}
           >
-            {signalLabel(
-              display,
-              strategy?.forward_test === true || Boolean(strategy?.fingerprint),
+            <span className={cn(x.decision === 'ANALYSIS_ONLY' && 'text-sm font-semibold')}>
+              {x.decisionLabel}
+            </span>
+            {confirmed && forward && (
+              <span className="text-2xs mt-0.5 block font-medium opacity-80">اختبار مباشر</span>
             )}
           </div>
-          <div>
-            <div className="text-fg-subtle text-2xs mb-1 flex items-center justify-between">
-              <span>قوة الإشارة</span>
-              <span className="flex items-center gap-1.5">
-                <span className="ns-num" data-testid="signal-score">
-                  {formatScore(display.score)}
-                </span>
-                {strategy?.score_calibrated === false && (
-                  <span
-                    data-testid="score-uncalibrated"
-                    title="درجة توافق غير معايرة — ليست احتمالية نجاح"
-                    className="text-fg-subtle/80"
-                  >
-                    غير معايرة
-                  </span>
+          {x.decision === 'ANALYSIS_ONLY' && (
+            <p className="text-warning text-2xs" data-testid="research-only">
+              {ANALYSIS_ONLY_TEXT}
+            </p>
+          )}
+          {x.biasLabel && (
+            <div
+              data-testid="analysis-bias"
+              data-bias={x.bias}
+              title="ميل تحليلي من الاتجاه والهيكل — ليس إشارة تداول"
+              className={cn(
+                'flex items-center justify-between rounded-md border border-dashed px-2 py-1 text-xs',
+                'border-line-strong',
+              )}
+            >
+              <span className="text-fg-subtle">الميل التحليلي</span>
+              <span className={cn('font-semibold', DIRECTION_TEXT[x.bias ?? 'neutral'])}>
+                {x.biasLabel}
+              </span>
+            </div>
+          )}
+          <dl className="flex flex-col gap-1 text-xs">
+            <div className="flex items-baseline gap-1.5" data-testid="decision-direction">
+              <dt className="text-fg-subtle shrink-0">الاتجاه؟</dt>
+              <dd
+                title={x.direction.detail}
+                className={cn(
+                  'truncate font-semibold',
+                  DIRECTION_TEXT[x.direction.tone ?? 'neutral'],
                 )}
+              >
+                {x.direction.label}
+              </dd>
+            </div>
+            <div className="flex items-baseline gap-1.5" data-testid="decision-trade">
+              <dt className="text-fg-subtle shrink-0">هل في صفقة؟</dt>
+              <dd className="line-clamp-2" title={x.tradeLine}>
+                {x.tradeLine}
+              </dd>
+            </div>
+            <div className="flex items-baseline gap-1.5" data-testid="signal-state">
+              <dt className="text-fg-subtle shrink-0">ليش؟</dt>
+              <dd className="text-fg-muted line-clamp-2" title={x.reason}>
+                {x.reason}
+              </dd>
+            </div>
+          </dl>
+          <div title={SCORE_TOOLTIP} data-testid="strategy-score">
+            <div className="text-fg-subtle text-2xs mb-1 flex items-center justify-between gap-2">
+              <span className="flex items-center gap-1 truncate">
+                {SCORE_LABEL}
+                <Info className="size-3 shrink-0" aria-label={SCORE_TOOLTIP} />
+              </span>
+              <span className="ns-num text-fg text-xs font-semibold" data-testid="signal-score">
+                {formatScore(x.score)}
               </span>
             </div>
             <div
               className="bg-sunken border-line h-1.5 overflow-hidden rounded-full border"
               role="meter"
-              aria-label="قوة الإشارة"
+              aria-label={SCORE_LABEL}
+              aria-description={SCORE_TOOLTIP}
               aria-valuemin={0}
               aria-valuemax={100}
-              aria-valuenow={display.score === null ? undefined : scoreValue}
-              aria-valuetext={display.score === null ? 'غير متاح' : formatScore(display.score)}
+              aria-valuenow={x.score === null ? undefined : scoreValue}
+              aria-valuetext={x.score === null ? 'غير متاح' : formatScore(x.score)}
             >
-              {display.score !== null && (
+              {x.score !== null && (
                 <span
                   className={cn(
-                    'block h-full',
-                    developing ? 'bg-warning' : 'bg-current',
-                    !developing && SIGNAL_CLASS_STYLE[display.signalClass].split(' ')[1],
+                    'ns-meter block h-full',
+                    x.decision === 'BUY'
+                      ? 'bg-sig-buy'
+                      : x.decision === 'SELL'
+                        ? 'bg-sig-sell'
+                        : 'bg-fg-subtle',
                   )}
                   style={{ width: `${String(scoreValue)}%` }}
                 />
               )}
             </div>
+            {x.candidateScore && (
+              <p className="text-fg-subtle text-2xs mt-0.5" data-testid="candidate-score">
+                أفضل إعداد مرشّح — لم يستوفِ شروط الإشارة
+              </p>
+            )}
+            {strategy?.score_calibrated === false && (
+              <span data-testid="score-uncalibrated" className="sr-only">
+                غير معايرة
+              </span>
+            )}
           </div>
-          {state && (
-            <p className="text-fg-subtle text-2xs line-clamp-2" data-testid="signal-state">
-              {state}
-            </p>
-          )}
-          {strategy && !strategy.signal_capable && (
-            <p className="text-warning text-2xs" data-testid="research-only">
-              {strategy.scope_note_ar ?? 'هذا الفريم غير مفعّل للإشارات حالياً'}
-            </p>
-          )}
           {strategy?.fingerprint && (
             <p className="text-fg-subtle text-2xs ns-ltr" data-testid="strategy-fingerprint">
               {strategy.fingerprint}
@@ -347,31 +414,46 @@ export function SignalPanel() {
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col gap-2">
-          <div className="grid grid-cols-6 gap-2">
-            {PLAN_METRICS.map((m, i) => (
-              <PlanCell
-                key={m.label}
-                metric={m}
-                value={values[i] ?? null}
-                developing={developing}
-              />
+          {confirmed ? (
+            <div className="grid grid-cols-6 gap-2" data-testid="trade-plan">
+              {PLAN_METRICS.map((m, i) => (
+                <PlanCell key={m.label} metric={m} value={values[i] ?? null} developing={false} />
+              ))}
+            </div>
+          ) : (
+            <div
+              data-testid="entry-blockers"
+              className="bg-sunken/60 border-line rounded-lg border px-2.5 py-1.5"
+            >
+              <h3 className="text-xs font-semibold">ما الذي يمنع الدخول حالياً؟</h3>
+              {x.blockers.length > 0 ? (
+                <ul className="text-fg-muted text-2xs mt-1 grid gap-x-4 gap-y-0.5 @5xl:grid-cols-2">
+                  {x.blockers.slice(0, 6).map((b) => (
+                    <li key={b} className="flex min-w-0 items-baseline gap-1.5" title={b}>
+                      <span aria-hidden className="bg-bear/70 size-1 shrink-0 rounded-full" />
+                      <span className="truncate">{b}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-fg-subtle text-2xs mt-1">لا توجد بيانات تقييم بعد.</p>
+              )}
+            </div>
+          )}
+          <ul
+            aria-label="شرح التحليل"
+            className="ns-scroll grid max-h-40 grid-cols-2 gap-1 overflow-y-auto @5xl:max-h-52 @6xl:grid-cols-3"
+          >
+            {x.categories.map((row) => (
+              <CategoryCell key={row.key} row={row} />
             ))}
-          </div>
-          <div className="grid grid-cols-5 gap-2 @5xl:grid-cols-9" aria-label="مؤشرات التحليل">
-            {metrics.map((m) => (
-              <AnalysisCell key={m.key} metric={m} />
-            ))}
-          </div>
-        </div>
-
-        <div className="border-line w-28 shrink-0 border-s ps-3 @5xl:w-36">
-          <MtfPanel context={snapshot?.analysis_ready ? snapshot.multi_timeframe : null} />
+          </ul>
         </div>
       </div>
 
       <p className="text-fg-subtle text-2xs mt-2 flex items-center gap-1.5">
         <Info className="size-3" />
-        {RISK_NOTE} قوة الإشارة درجة توافق شروط الاستراتيجية، وليست احتمالية نجاح الصفقة.
+        {RISK_NOTE} {SCORE_TOOLTIP}
         {strategy && <span data-testid="strategy-note"> {strategy.note_ar}</span>}
       </p>
       {import.meta.env.DEV && debugOpen && <AnalysisDebug snapshot={snapshot} />}
