@@ -10,6 +10,14 @@
 > (`wese-trade-forward-4.2-a03e20f1d4`, fingerprint `4.2-a03e20f`) is frozen and is not touched
 > by this research.
 
+## Verdict (read this first)
+
+**LOWER-TF PRODUCTION READY: NO.** Under the pre-registered protocol, no 1m / 5m / 10m
+configuration passed development. Every one of 120 configurations is negative after
+realistic costs, or (1m LTF-5.1) too small a sample to mean anything. The validation segment
+was never evaluated, and the holdout is still sealed. 1m / 5m / 10m stay «تحليل فقط». Details
+are in §8–§12.
+
 ## 0. Prior evidence (Phase 4.1, `docs/research.md`)
 
 - 1m was **structurally dominated by friction**. Median 1m ATR was 0.063% against a 0.14%
@@ -242,3 +250,81 @@ Net = after fees and slippage, base costs. 12 symbols. Development spans 541 day
 The trend + volatility-expansion gate halves the losses, but no configuration is positive after
 costs. **Per §9, no further iteration is run for 5m/10m in Phase 5.** The validation and holdout
 segments were **not read** for any configuration, and the holdout stays sealed.
+
+## 11. 1m results (development segment only)
+
+**Data.** 1m, 365 days per symbol; the development segment holds 176 days of it. 0 malformed
+rows, 0 gaps across 4.6 M pre-holdout candles. Zero-volume 1m candles are kept and recorded:
+NEAR 1,682 · UNI 1,222 · PUMP 478 · ARB 393 · others ≤ 60.
+
+| Iteration | Configs | Best net E | Best gross E | Verdict |
+| --- | ---: | ---: | ---: | --- |
+| LTF-5.0 | 32 | −0.064 (n = 393, PF 0.86) | +0.026 | **0 configurations positive → rejected (G1)** |
+| B1 / B2 baselines | — | −0.551 / −0.550 | ≈ 0 | — |
+| LTF-5.1 | 8 | +0.128 (n = 58) / +0.092 (n = 80) | +0.194 | **fails the bar: n ≪ 300, anchors negative** |
+
+**1m friction.** At F = 0.10, only 115–480 trades survive in 176 days across 12 symbols: the
+cost floor rejects almost every structural 1m plan. This confirms Phase 4.1 §4.
+
+The best-looking 1m LTF-5.1 configuration (context 15m, time stop 96) is **not evidence of an
+edge**:
+- the 90% day-block bootstrap CI of net E is **−0.155 … +0.478 R**, so zero is well inside;
+- it is the best of 16 configurations (winner's curse);
+- it trades about 0.3 times a day across the whole universe;
+- its result rests on HYPE, NEAR and UNI, while SOL, SUI and DOGE lose.
+
+## 12. Verdict
+
+**LOWER-TF PRODUCTION READY: NO.** No lower-timeframe configuration passed even the first
+gate (G1, development). As pre-registered, the validation segment was **never evaluated** and
+the holdout stays **sealed**: there is no frozen candidate to read it with. No forward test was
+started, because none was earned. 1m / 5m / 10m stay «تحليل فقط» in the app.
+
+| Research version | Fingerprint | TFs | Status |
+| --- | --- | --- | --- |
+| `wese-trade-ltf-research-5.0-f8b1c0a4a7` | `5.0-f8b1c0a` | 1m, 5m, 10m | rejected at development (G1) |
+| `wese-trade-ltf-research-5.1-fd427a90fd` | `5.1-fd427a9` | 1m, 5m, 10m | rejected at development (stricter §9 bar) |
+
+Fingerprints are sha256 over `strategy.py`, `sim.py`, `data.py` and the grid definition, at the
+commit that adds this section.
+
+**Exact failing metrics.** Development, net, base costs:
+
+| TF | Required (G1) | Best LTF-5.0 | Best LTF-5.1 | Gross ceiling |
+| --- | --- | --- | --- | --- |
+| 1m | net E ≥ +0.05, n ≥ 300 | −0.064 (n = 393) | +0.128 but n = 58 (CI −0.15…+0.48) | +0.03 (5.0) |
+| 5m | net E ≥ +0.05, n ≥ 300 | −0.071 (n = 2,309) | −0.026 (n = 917) | +0.04 |
+| 10m | net E ≥ +0.05, n ≥ 300 | −0.077 (n = 4,988) | −0.023 (n = 855) | +0.03 |
+
+**Why it was rejected.** The HTF-aligned pullback/structure trigger carries **≈ 0 gross
+directional information** on 1m–10m. The round-trip friction of 0.07–0.12 R per trade at
+realistic stop sizes therefore makes every variant negative. Nothing in the component
+ablations, sessions, sides or symbols lifted gross E by a margin that would survive costs.
+
+**What was tried.**
+- 64 + 16 + 32 + 8 pre-registered configurations: context timeframe, displacement, cost floor,
+  break-even, market vs limit entry, regime gate, time stop, runner exit.
+- Component, session, side, regime, symbol, cost-share and exit diagnostics.
+- Two baselines (simple trend and the analysis bias).
+- 12 symbols and 2 years of 5m / 1 year of 1m.
+
+**What remains promising (weak, unproven).** Trend + volatility-expansion regimes with a
+longer holding time:
+- the only gross-positive pocket on every lower timeframe (+0.03 to +0.19 R gross);
+- the sample is far too small and too concentrated to mean anything yet.
+
+**What should be tested next** (a new phase, never by re-reading this holdout):
+1. A **prospective** test of LTF-5.1 (1m, ctx 15m/5m, time stop 96) on data **after
+   2026-10-07**, frozen as-is. No tuning, minimum 300 trades.
+2. Maker-only execution research (post-only entries and exits). The cost model, not the
+   signal, dominates 1m/5m.
+3. Lower-timeframe **execution** of the validated 15m/30m/1h signals, which was already studied
+   in Phase 4.1 §10, instead of independent lower-timeframe signals.
+
+**Forward-test observations required?** Yes. Any future candidate must first pass development
+and validation, then the sealed holdout, then ≥ 28 days and ≥ 100 forward trades per timeframe.
+None qualifies today.
+
+**Production safety.** Strategy 4.2 (`wese-trade-forward-4.2-a03e20f1d4` / `4.2-a03e20f`) and its
+BUY/SELL fixtures were not modified. The research package (`app/research/ltf5`) is not imported
+by the live signal path.
