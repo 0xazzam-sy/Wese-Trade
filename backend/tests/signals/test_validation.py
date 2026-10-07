@@ -119,3 +119,26 @@ def test_disabled_families_never_emit_directional_signals() -> None:
             assert out.neutral_reason == DISABLED_FAMILY_REASON and out.hypothesis is hyp
     # research candidates are never live while testing
     assert all(c.status is S.TESTING for c in RESEARCH_CANDIDATES)
+
+
+def test_lower_timeframe_slot_is_reserved_but_inactive() -> None:
+    from app.forward_test.candidate import TIMEFRAMES
+    from app.signal_engine.validation import (
+        LOWER_TIMEFRAME_SLOT,
+        RESEARCH_ONLY_TIMEFRAMES,
+        LowerTimeframeSlot,
+        ResearchCandidate,
+        ValidationStatus,
+    )
+
+    assert LOWER_TIMEFRAME_SLOT.candidate is None
+    assert not LOWER_TIMEFRAME_SLOT.live_enabled
+    for tf in ("1m", "5m", "10m"):
+        assert tf in RESEARCH_ONLY_TIMEFRAMES
+        assert not LOWER_TIMEFRAME_SLOT.signal_capable(tf)
+        assert tf not in TIMEFRAMES  # the frozen forward test never signals there
+    testing = ResearchCandidate("x", ValidationStatus.TESTING, "d", "v")
+    with pytest.raises(ValueError, match="FORWARD_TEST"):
+        LowerTimeframeSlot(candidate=testing, live_enabled=True)
+    with pytest.raises(ValueError, match="FORWARD_TEST"):
+        LowerTimeframeSlot(live_enabled=True)

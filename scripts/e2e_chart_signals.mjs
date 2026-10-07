@@ -74,12 +74,18 @@ page.on("pageerror", (e) => consoleErrors.push(String(e)));
 
 // --- first-run admin (password generated here, never printed) ---------------------------------
 const setup = await page.request.get(`${BASE}/api/v1/auth/setup`);
+const password =
+  process.env.E2E_ADMIN_PASSWORD ?? randomBytes(18).toString("base64url");
 if ((await setup.json()).needs_setup) {
-  const password = randomBytes(18).toString("base64url");
   const created = await page.request.post(`${BASE}/api/v1/auth/setup`, {
     data: { username: "e2e_admin", password },
   });
   check("first-run admin created", created.status() === 201);
+} else if (process.env.E2E_ADMIN_PASSWORD) {
+  const login = await page.request.post(`${BASE}/api/v1/auth/login`, {
+    data: { username: "e2e_admin", password },
+  });
+  check("admin signed in", login.ok());
 }
 
 async function chartPanel(id) {

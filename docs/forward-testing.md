@@ -352,3 +352,25 @@ exactly as warned above.
 * Deterministic UI fixture: `frontend/src/test/fixtures/frozen-signals.json`, generated from the
   real engine replay by `python -m tests.signals.ui_fixtures` (a backend test fails on drift).
   Browser E2E: `scripts/e2e_chart_signals.mjs` (screenshots in `docs/ux/`).
+
+## Analysis panel and chart context (v1.0.1)
+
+- **One canonical chart context.** The analysis panel shows exactly the focused chart's
+  symbol/timeframe (`useFocusedChartContext`); analysis or signals of any other context are
+  refused. Symbol/timeframe changes are atomic: stale requests are ignored (generation IDs),
+  the price scale is reset to auto-scale, history is loaded and fitted, then the live stream
+  is re-subscribed. Regression: `scripts/e2e_symbol_switch.mjs` (also run by
+  `scripts/release_ui_check.py` on the installed Windows/macOS app at 1366×768 and 1920×1080).
+- **Decision summary** (الاتجاه؟ هل في صفقة؟ ليش؟). BUY/SELL only from a confirmed signal of
+  the frozen engine; otherwise «محايد» with «لا توجد فرصة دخول مؤكدة حسب شروط الاستراتيجية
+  حالياً.» Entry/SL/TP1-3/R:R are shown only for a confirmed signal.
+- **Category breakdown** (`frontend/src/features/signals/lib/explain.ts`): 13 Arabic
+  categories built from the real engine output — component points/weight, penalties,
+  `neutral_reason` — and the analysis snapshot. Nothing is computed or invented in the UI.
+- **«ما الذي يمنع الدخول حالياً؟»** lists the real gate reason, penalties and negatives.
+- **Score wording:** «قوة توافق شروط الاستراتيجية» — it measures how well the strategy's
+  conditions are met and is never a probability of success.
+- **1m/5m/10m:** «تحليل فقط» with an analytical bias (trend and main structure agree),
+  visually distinct from a trade. `LOWER_TIMEFRAME_SLOT` (`app/signal_engine/validation.py`)
+  reserves a place for a future, separately versioned lower-timeframe research strategy; it is
+  inactive and can only be enabled for a candidate that reached FORWARD_TEST.

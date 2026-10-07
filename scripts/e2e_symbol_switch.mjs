@@ -3,7 +3,7 @@
  * Regression E2E for the v1.0.0 blank-chart / stale-context bugs (packaged-style app:
  * backend in desktop mode serving the production build, real OKX data).
  *
- *   node scripts/e2e_symbol_switch.mjs --url http://127.0.0.1:PORT [--out dir]
+ *   node scripts/e2e_symbol_switch.mjs --url http://127.0.0.1:PORT [--out dir] [--viewport 1920x1080]
  *
  * 1. Reported bug: BTC (tens of thousands) → a low-price symbol picked in the market list.
  *    The new candles must be loaded AND inside the visible price range (no BTC scale left
@@ -54,8 +54,9 @@ const browser = await pw.chromium.launch(
       ? { channel: process.env.CHROMIUM_CHANNEL }
       : {},
 );
+const [vw, vh] = (args.viewport ?? "1366x768").split("x").map(Number);
 const context = await browser.newContext({
-  viewport: { width: 1366, height: 768 },
+  viewport: { width: vw, height: vh },
   locale: "ar",
 });
 const page = await context.newPage();
@@ -63,12 +64,15 @@ const consoleErrors = [];
 page.on("pageerror", (e) => consoleErrors.push(String(e)));
 
 const setup = await page.request.get(`${BASE}/api/v1/auth/setup`);
+const password =
+  process.env.E2E_ADMIN_PASSWORD ?? randomBytes(18).toString("base64url");
 if ((await setup.json()).needs_setup) {
   await page.request.post(`${BASE}/api/v1/auth/setup`, {
-    data: {
-      username: "e2e_admin",
-      password: randomBytes(18).toString("base64url"),
-    },
+    data: { username: "e2e_admin", password },
+  });
+} else if (process.env.E2E_ADMIN_PASSWORD) {
+  await page.request.post(`${BASE}/api/v1/auth/login`, {
+    data: { username: "e2e_admin", password },
   });
 }
 

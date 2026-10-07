@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import argparse
 import os
+import secrets
+import shutil
 import subprocess
 import sys
 import time
@@ -41,18 +43,40 @@ def main() -> None:
     proc, port = launch(args.app, log, env)
     check("installed app starts + backend auto-starts", True, f"port {port}")
     time.sleep(2)
-    node = subprocess.run(
+    # One admin for all browser runs; the password lives only in this process's env.
+    env_e2e = {**os.environ, "E2E_ADMIN_PASSWORD": secrets.token_urlsafe(18)}
+    url = f"http://127.0.0.1:{port}"
+    node = shutil.which("node") or "node"
+    chart = subprocess.run(  # noqa: S603 - fixed arguments
         [
-            "node",
+            node,
             str(ROOT / "scripts" / "e2e_chart_signals.mjs"),
             "--url",
-            f"http://127.0.0.1:{port}",
+            url,
             "--out",
             str(args.out),
         ],
         check=False,
+        env=env_e2e,
     )
-    check("chart signal E2E on the installed app", node.returncode == 0)
+    check("chart signal E2E on the installed app", chart.returncode == 0)
+    # v1.0.1 regression: blank chart / stale scale / analysis context on symbol switch.
+    for viewport in ("1366x768", "1920x1080"):
+        switch = subprocess.run(  # noqa: S603 - fixed arguments
+            [
+                node,
+                str(ROOT / "scripts" / "e2e_symbol_switch.mjs"),
+                "--url",
+                url,
+                "--out",
+                str(args.out / f"switch-{viewport}"),
+                "--viewport",
+                viewport,
+            ],
+            check=False,
+            env=env_e2e,
+        )
+        check(f"symbol switch E2E on the installed app ({viewport})", switch.returncode == 0)
     close_app(proc, log)
     failed = [r for r in RESULTS if not r[1]]
     print(

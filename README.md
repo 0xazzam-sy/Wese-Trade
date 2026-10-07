@@ -13,7 +13,7 @@ using **OKX public market data**.
 > Signals are computed from OKX data, not from another exchange's execution price.
 > No automatic cross-exchange correction is attempted.
 
-**Current status: Phase 4.3 — Wese Trade Desktop 1.0.0 (Windows x64, macOS Apple Silicon).**
+**Current status: Phase 4.3 — Wese Trade Desktop 1.0.1 (Windows x64, macOS Apple Silicon).**
 
 > **Desktop app.** Install and run; no Python, Node or terminal needed. The app starts its
 > own local service and keeps all data in your user's app-data folder. The first launch

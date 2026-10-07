@@ -176,3 +176,30 @@ RESEARCH_CANDIDATES = (
         verdict="not promoted: post-hoc design, negative pre-period (-0.068R, n=252)",
     ),
 )
+
+
+@dataclass(frozen=True, slots=True)
+class LowerTimeframeSlot:
+    """Reserved place for a FUTURE lower-timeframe (1m/5m/10m) research strategy.
+
+    It is deliberately inactive. A lower-timeframe strategy must be its own, separately
+    versioned ResearchCandidate (never a tweak of the frozen forward-test strategy) and
+    may emit live signals only after it reaches FORWARD_TEST through the documented state
+    machine. Until then these timeframes show analysis only.
+    """
+
+    timeframes: frozenset[str] = RESEARCH_ONLY_TIMEFRAMES
+    candidate: ResearchCandidate | None = None
+    live_enabled: bool = False
+
+    def __post_init__(self) -> None:
+        if self.live_enabled and (
+            self.candidate is None or self.candidate.status is not ValidationStatus.FORWARD_TEST
+        ):
+            raise ValueError("lower-timeframe signals require a FORWARD_TEST candidate")
+
+    def signal_capable(self, timeframe: str) -> bool:
+        return self.live_enabled and timeframe in self.timeframes
+
+
+LOWER_TIMEFRAME_SLOT = LowerTimeframeSlot()
