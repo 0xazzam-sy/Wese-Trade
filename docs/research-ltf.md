@@ -155,3 +155,79 @@ never simulated.
 
 The strategy score is labelled «قوة توافق شروط الاستراتيجية». It is not a probability. Win rate
 is reported but is **not** a gate.
+
+---
+
+## 7. Data quality (development + validation range; the holdout is not read)
+
+5m, 730 days per symbol (HYPE 509 d and PUMP 450 d are limited by their listing dates). Real OKX
+candles. **0 malformed rows, 0 duplicates (primary key).** Missing candles: 0–3 per symbol.
+
+**Cleaning rule corrected before any result was read.** The first draft *dropped* "bad ticks"
+(range > 25× the trailing median and > 8% of price). Inspection showed that every flagged candle
+was a **real, continuous market event**: each opens at the previous close and is confirmed
+across symbols. Examples:
+- the 2025-10-10 liquidation cascade: ARB −61% and XRP −35% within one 5m candle;
+- the 2024-12-05 BTC flash drop: −10% in 5 minutes.
+
+Dropping them would delete the worst stop-outs and bias every result upward. They are now
+**kept and only counted** (`extreme`). Gaps are never filled. Aggregated timeframes use complete
+buckets only.
+
+**Disclosed process slip.** During harness smoke testing, one aggregate (ETHUSDT, 5m, a single
+default configuration, net −0.14 R) was computed over the full date range, which included the
+holdout. No other holdout number exists. The loader now *refuses* holdout candles unless
+explicitly unlocked (`HoldoutLockedError`, covered by a test).
+
+## 8. LTF-5.0 development results (pre-registered grid, development segment only)
+
+Net = after fees and slippage, base costs. 12 symbols. Development spans 541 days
+(5m data start → 2026-03-31).
+
+| TF | Configs | Best net E | Best gross E | Configs with net E > 0 | B1 net | B2 net | Selection |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 5m | 32 | −0.071 (n = 2,309, PF 0.86) | +0.004 | **0** | −0.307 | −0.297 | **rejected (G1)** |
+| 10m | 32 | −0.077 (n = 4,988, PF 0.85) | +0.003 | **0** | −0.214 | −0.185 | **rejected (G1)** |
+
+- LTF-5.0 loses less than both baselines, but every configuration is negative after costs.
+- The **gross** expectancy is ≈ 0 everywhere, so the setup has **no directional edge even
+  before friction**. Costs are 0.07–0.12 R per trade.
+
+**Development diagnostics** (exploratory, independent trades, F = 0.20, n ≈ 15,000 per TF):
+- No optional component (displacement, sweep, volume, candle confirmation, volatility band,
+  extension) moves gross E by more than ±0.03 R.
+- On 5m the alignment score is mildly **inverted**: score ≥ 90 gives −0.030 R gross, score 30
+  gives +0.091 R gross.
+- Longs and shorts are both ≈ 0 gross.
+- 5m sessions: New York +0.027 R and London −0.056 R gross (likely noise at this size). 10m
+  shows no session effect.
+- The only regime consistent on both timeframes is **trending + high volatility**:
+  - gross +0.030 R on 5m (n = 2,466);
+  - gross +0.061 R on 10m (n = 1,898);
+  - still negative net (−0.064 / −0.013 R).
+- Per symbol, gross E ranges from −0.13 R (HYPE) to +0.05 R (PEPE). Nothing is robust.
+- Exit decomposition: time exits average +0.64 R gross. Longer drift exists, but stop-outs at
+  −1.13 R net dominate.
+
+## 9. Pre-registration of ONE follow-up iteration: LTF-5.1 (written before it is run)
+
+- **Hypothesis.** Taken from the single consistent development diagnostic: trend continuation
+  works only when the higher timeframe is clearly trending **and** volatility is expanding, and
+  it needs room to run.
+- **Fixed changes from 5.0:**
+  - regime gate: context strength ≥ 1.0 (|EMA20 − EMA50| / ATR on the context timeframe) **and**
+    ATR percentile ≥ 80;
+  - cost floor F = 0.10;
+  - market entry.
+- **Grid (8 configurations per TF):**
+  - context TF (2 options);
+  - time stop {48, 96} candles;
+  - targets {standard 1/2/3 R thirds, runner: ½ at TP1 and ½ at TP3}.
+- **Stricter development bar, because the same development data inspired the hypothesis:**
+  - net E ≥ +0.05 R with ≥ 300 trades;
+  - **and** net E > 0 separately for anchors (BTC/ETH/SOL) and for the other 9 symbols;
+  - **and** gross E ≥ +0.10 R.
+- If 5.1 fails development, **no further iteration is run in Phase 5**. The verdict is then
+  "no robust lower-timeframe edge", and 1m/5m/10m stay «تحليل فقط».
+- Validation and holdout are read only for a timeframe that passes this bar. The §6 gates apply
+  unchanged.

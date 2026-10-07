@@ -5,9 +5,10 @@ Cleaning rules (documented in docs/research-ltf.md §7):
 * a candle with impossible OHLC (high < max(open, close), low > min(open, close), a
   non-positive price) or negative volume is DROPPED and counted, and the hole it leaves is
   treated like any other gap;
-* a "bad tick" is a candle whose range exceeds 25x the trailing median range of the series
-  (and 8% of price); it is counted and DROPPED (a single exchange print must not create or
-  stop out a research trade);
+* an "extreme" candle (range > 25x the trailing median range and > 8% of price) is KEPT and
+  only counted. Inspection showed every such candle in the universe is a real, continuous
+  market event (e.g. the 2025-10-10 liquidation cascade, the 2024-12-05 BTC flash drop);
+  dropping them would delete the worst stop-outs and bias results upward;
 * gaps are never filled. Aggregated candles (10m/15m/30m/1h) are built only from complete
   buckets (every child present), otherwise the bucket is skipped;
 * the strategy restarts its warm-up after any gap longer than 3 candles (see strategy.py).
@@ -84,7 +85,7 @@ class Quality:
     rows: int = 0
     kept: int = 0
     malformed: int = 0
-    bad_ticks: int = 0
+    extreme: int = 0
     gaps: int = 0
     missing_candles: int = 0
     longest_gap_candles: int = 0
@@ -138,8 +139,7 @@ def load(
         if len(window) >= 100:
             median = window[len(window) // 2]
             if median > 0 and rng > 25 * median and rng > 0.08 * c:
-                q.bad_ticks += 1
-                continue
+                q.extreme += 1
         if len(ranges) == ranges.maxlen:
             old = ranges[0]
             window.pop(_index(window, old))
