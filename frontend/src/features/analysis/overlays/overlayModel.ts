@@ -228,7 +228,7 @@ export function buildOverlayModel(
         kind: 'protected',
         dashed: true,
         faded: false,
-        label: level.side === 'high' ? 'قمة محمية' : 'قاع محمي',
+        label: level.side === 'high' ? 'مقاومة · قمة محمية' : 'دعم · قاع محمي',
       });
     }
     dev?.swing_pivots.forEach((p) => labels.push(pivotLabel(p, false)));
@@ -249,23 +249,32 @@ export function buildOverlayModel(
   if (toggles.liquidity && snapshot.liquidity) {
     const liq = snapshot.liquidity;
     const price = snapshot.price ?? 0;
-    liq.pools
+    const nearest = liq.pools
       .filter((p) => p.status === 'active')
       .sort((a, b) => Math.abs(a.level - price) - Math.abs(b.level - price))
-      .slice(0, MAX_POOLS)
-      .forEach((p) => {
-        const equal = p.source === 'equal_highs' || p.source === 'equal_lows';
-        lines.push({
-          id: `pool:${p.id}`,
-          from: p.time,
-          to: null,
-          price: p.level,
-          kind: p.side === 'buy_side' ? 'liq-buy' : 'liq-sell',
-          dashed: true,
-          faded: !equal,
-          ...(equal ? { label: p.source === 'equal_highs' ? 'EQH' : 'EQL' } : {}),
-        });
+      .slice(0, MAX_POOLS);
+    // Only the closest pool on each side gets a text label: meaningful levels, no clutter.
+    const named = new Set(
+      (['buy_side', 'sell_side'] as const)
+        .map((side) => nearest.find((p) => p.side === side)?.id)
+        .filter(Boolean),
+    );
+    nearest.forEach((p) => {
+      const equal = p.source === 'equal_highs' || p.source === 'equal_lows';
+      const side = p.side === 'buy_side' ? 'سيولة علوية' : 'سيولة سفلية';
+      const tag = equal ? (p.source === 'equal_highs' ? 'EQH' : 'EQL') : null;
+      const label = named.has(p.id) ? (tag ? `${side} · ${tag}` : side) : tag;
+      lines.push({
+        id: `pool:${p.id}`,
+        from: p.time,
+        to: null,
+        price: p.level,
+        kind: p.side === 'buy_side' ? 'liq-buy' : 'liq-sell',
+        dashed: true,
+        faded: !equal && !named.has(p.id),
+        ...(label ? { label } : {}),
       });
+    });
     liq.sweeps.slice(-MAX_SWEEPS).forEach((s) => {
       labels.push({
         id: `sw:${s.id}`,

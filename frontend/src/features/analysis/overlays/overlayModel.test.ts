@@ -42,8 +42,20 @@ describe('buildOverlayModel', () => {
     expect(zoneKinds).toEqual(new Set(['fvg-bull', 'ob-bull', 'premium', 'discount', 'ote']));
     expect(all.labels.some((l) => l.text === 'BOS')).toBe(true);
     expect(all.labels.some((l) => l.text === 'HH')).toBe(true);
-    expect(all.lines.some((l) => l.label === 'EQH')).toBe(true);
+    expect(all.lines.some((l) => l.label?.endsWith('EQH'))).toBe(true);
     expect(all.lines.some((l) => l.kind === 'protected')).toBe(true);
+  });
+
+  it('names meaningful levels in Arabic: support, resistance, liquidity above/below', () => {
+    const all = buildOverlayModel(readySnapshot(), ALL_ON);
+    const labels = all.lines.map((l) => l.label ?? '');
+    expect(labels.some((l) => l.startsWith('مقاومة') || l.startsWith('دعم'))).toBe(true);
+    expect(labels.some((l) => l.startsWith('سيولة علوية') || l.startsWith('سيولة سفلية'))).toBe(
+      true,
+    );
+    // at most one Arabic liquidity name per side
+    expect(labels.filter((l) => l.startsWith('سيولة علوية')).length).toBeLessThanOrEqual(1);
+    expect(labels.filter((l) => l.startsWith('سيولة سفلية')).length).toBeLessThanOrEqual(1);
   });
 
   it('keeps the default chart readable (premium/discount and OTE off)', () => {

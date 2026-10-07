@@ -133,9 +133,10 @@ describe('SignalPanel (analysis)', () => {
     setBoth(snap15(), view({ evaluation: evaluation() }));
     expect(panel()).toHaveAttribute('data-decision', 'NEUTRAL');
     expect(screen.getByTestId('signal-badge')).toHaveTextContent('محايد');
-    expect(screen.getByTestId('decision-trade')).toHaveTextContent(
+    expect(screen.getByTestId('decision-headline')).toHaveTextContent(
       'لا توجد فرصة دخول مؤكدة حسب شروط الاستراتيجية حالياً.',
     );
+    expect(screen.getByTestId('decision-trade')).toHaveTextContent(/^هل في صفقة؟لا$/);
     expect(screen.queryByTestId('trade-plan')).toBeNull();
     for (const abbr of ['Entry', 'SL', 'TP1', 'TP2', 'TP3', 'R:R']) {
       expect(panel().querySelector(`[data-plan="${abbr}"]`)).toBeNull();

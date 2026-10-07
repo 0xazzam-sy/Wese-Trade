@@ -83,8 +83,16 @@ const TONE_COLOR: Record<Tone, keyof OverlayPalette> = {
   warning: 'warning',
 };
 
+/**
+ * Visual hierarchy: trade plan and named levels (دعم / مقاومة / سيولة) are drawn larger
+ * and fully opaque; technical abbreviations (HH, BOS, Sweep, FVG, OB…) stay smaller and
+ * quieter so the signal, the price and support/resistance read first.
+ */
 const FONT = '500 10px "IBM Plex Mono", ui-monospace, monospace';
-const ARABIC_FONT = '500 10px "IBM Plex Sans Arabic", system-ui, sans-serif';
+const MINOR_FONT = '500 9px "IBM Plex Mono", ui-monospace, monospace';
+const ARABIC_FONT = '600 11px "IBM Plex Sans Arabic", system-ui, sans-serif';
+const MINOR_ALPHA = 0.62;
+const isArabic = (text: string) => /[؀-ۿ]/.test(text);
 
 class Renderer implements IPrimitivePaneRenderer {
   constructor(
@@ -240,9 +248,9 @@ export class AnalysisOverlay implements ChartOverlay, ISeriesPrimitive {
           ctx.strokeRect(Math.round(x1) + 0.5, Math.round(yTop) + 0.5, Math.max(1, x2 - x1), h);
         }
         if (zone.label && h >= 9) {
-          ctx.globalAlpha = zone.faded ? 0.45 : 0.85;
+          ctx.globalAlpha = zone.faded ? 0.35 : MINOR_ALPHA;
           ctx.fillStyle = color;
-          ctx.font = FONT;
+          ctx.font = MINOR_FONT;
           ctx.textBaseline = 'top';
           ctx.textAlign = 'left';
           ctx.fillText(zone.label, x1 + 3, yTop + 1);
@@ -268,7 +276,9 @@ export class AnalysisOverlay implements ChartOverlay, ISeriesPrimitive {
         if (line.label && (!plan || claimLabelRow(planLabelYs, py))) {
           ctx.setLineDash([]);
           ctx.fillStyle = color;
-          ctx.font = /[؀-ۿ]/.test(line.label) ? ARABIC_FONT : FONT;
+          const major = plan || isArabic(line.label);
+          ctx.globalAlpha = major ? 1 : line.faded ? 0.35 : MINOR_ALPHA;
+          ctx.font = isArabic(line.label) ? ARABIC_FONT : major ? FONT : MINOR_FONT;
           ctx.textAlign = 'right';
           ctx.textBaseline = 'bottom';
           ctx.fillText(line.label, Math.min(x2, width) - 4, py - 2);
@@ -281,8 +291,8 @@ export class AnalysisOverlay implements ChartOverlay, ISeriesPrimitive {
         const px = this.x(label.time, width, bounds);
         const py = y(label.price);
         if (px === null || py === null) continue;
-        ctx.globalAlpha = label.faded ? 0.45 : 0.9;
-        ctx.font = /[؀-ۿ]/.test(label.text) ? ARABIC_FONT : FONT;
+        ctx.globalAlpha = label.faded ? 0.35 : MINOR_ALPHA;
+        ctx.font = isArabic(label.text) ? ARABIC_FONT : MINOR_FONT;
         ctx.fillStyle = palette[TONE_COLOR[label.tone]];
         ctx.textBaseline = label.position === 'above' ? 'bottom' : 'top';
         ctx.fillText(label.text, px, label.position === 'above' ? py - 4 : py + 4);

@@ -54,6 +54,8 @@ export interface Explanation {
   decisionLabel: string;
   /** Answer to «هل في صفقة؟». */
   tradeLine: string;
+  /** Sentence under the decision badge. */
+  headline: string;
   /** Answer to «ليش؟». */
   reason: string;
   direction: { label: string; detail: string; tone: Direction3 | null };
@@ -299,9 +301,9 @@ function snapshotRow(
         c.direction === 'up' ? 'bullish' : c.direction === 'down' ? 'bearish' : 'neutral';
       const word = c.direction === 'up' ? 'صاعدة' : c.direction === 'down' ? 'هابطة' : 'محايدة';
       return {
-        state: `${word} · جسم ${c.body_pct.toFixed(0)}%`,
-        explanation: `آخر شمعة مغلقة ${word}، جسمها ${c.body_pct.toFixed(0)}% من مداها.`,
-        tone: c.body_pct >= 50 ? sign(dir, side) : 'neutral',
+        state: `${word} · جسم ${(c.body_pct * 100).toFixed(0)}%`,
+        explanation: `آخر شمعة مغلقة ${word}، جسمها ${(c.body_pct * 100).toFixed(0)}% من مداها.`,
+        tone: c.body_pct >= 0.5 ? sign(dir, side) : 'neutral',
       };
     }
     case 'opposing':
@@ -462,20 +464,24 @@ export function explain(
 
   let decisionLabel: string;
   let tradeLine: string;
+  let headline: string;
   let reason: string;
   if (signal) {
     decisionLabel = decision === 'BUY' ? 'BUY · شراء' : 'SELL · بيع';
-    tradeLine = 'نعم — إشارة مؤكدة من محرك Wese Trade (اختبار مباشر).';
+    tradeLine = 'نعم — إشارة مؤكدة';
+    headline = 'إشارة مؤكدة من محرك Wese Trade';
     reason = [FAMILY_AR[signal.family], ...positives.slice(0, 2)].join(' · ');
   } else if (researchOnly) {
     decisionLabel = 'تحليل فقط';
-    tradeLine = 'لا — الإشارات مفعّلة على فريمات 15د و30د و1س فقط.';
+    tradeLine = 'لا — الإشارات على 15د و30د و1س فقط';
+    headline = ANALYSIS_ONLY_TEXT;
     reason = bias
       ? `${BIAS_AR[bias]} حسب الاتجاه والهيكل — ليس إشارة تداول.`
       : 'التحليل غير جاهز بعد.';
   } else {
     decisionLabel = 'محايد';
-    tradeLine = NO_ENTRY_TEXT;
+    tradeLine = 'لا';
+    headline = NO_ENTRY_TEXT;
     reason = blockers[0] ?? NO_ENTRY_TEXT;
   }
 
@@ -484,6 +490,7 @@ export function explain(
     decision,
     decisionLabel,
     tradeLine,
+    headline,
     reason,
     direction,
     bias: signal ? null : bias,

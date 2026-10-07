@@ -17,7 +17,6 @@ import type { StrategyInfo, TradePlanDTO } from '@/types/signal';
 
 import { SignalDetails } from './components/SignalDetails';
 import {
-  ANALYSIS_ONLY_TEXT,
   explain,
   SCORE_LABEL,
   SCORE_TOOLTIP,
@@ -128,16 +127,23 @@ function StrategyBadge({ strategy }: { strategy: StrategyInfo }) {
   );
 }
 
-const TONE_TEXT: Record<ExplainTone, string> = {
-  positive: 'text-bull',
-  negative: 'text-bear',
-  neutral: 'text-fg',
-};
+/** Dot = does the category support or oppose the setup (not the market direction). */
 const TONE_DOT: Record<ExplainTone, string> = {
-  positive: 'bg-bull',
-  negative: 'bg-bear',
-  neutral: 'bg-fg-subtle/60',
+  positive: 'bg-accent',
+  negative: 'bg-warning',
+  neutral: 'bg-fg-subtle/50',
 };
+const TONE_TITLE: Record<ExplainTone, string> = {
+  positive: 'يدعم',
+  negative: 'يعارض',
+  neutral: 'محايد',
+};
+/** State text colored by the market direction it names. */
+function stateColor(state: string): string {
+  if (state.includes('صاعد')) return 'text-bull';
+  if (state.includes('هابط')) return 'text-bear';
+  return 'text-fg';
+}
 const DIRECTION_TEXT: Record<string, string> = {
   bullish: 'text-bull',
   bearish: 'text-bear',
@@ -164,13 +170,13 @@ function CategoryCell({ row }: { row: CategoryRow }) {
     <li
       data-category={row.key}
       data-tone={row.tone}
-      title={`${row.label}: ${row.state} — ${row.explanation}`}
+      title={`${row.label}: ${row.state} (${TONE_TITLE[row.tone]}) — ${row.explanation}`}
       className="ns-card-row flex min-w-0 flex-col gap-0.5 rounded-md px-2 py-1"
     >
       <div className="flex min-w-0 items-center gap-1.5 text-xs">
         <span aria-hidden className={cn('size-1.5 shrink-0 rounded-full', TONE_DOT[row.tone])} />
         <span className="text-fg-muted shrink-0">{row.label}</span>
-        <span className={cn('min-w-0 truncate font-semibold', TONE_TEXT[row.tone])}>
+        <span className={cn('min-w-0 truncate font-semibold', stateColor(row.state))}>
           {row.state}
         </span>
         {pts !== null && (
@@ -189,7 +195,7 @@ function CategoryCell({ row }: { row: CategoryRow }) {
           </span>
         )}
       </div>
-      <p className="text-fg-subtle text-2xs truncate">{row.explanation}</p>
+      <p className="text-fg-subtle text-2xs hidden truncate @5xl:block">{row.explanation}</p>
     </li>
   );
 }
@@ -261,6 +267,11 @@ export function SignalPanel() {
           </span>
         )}
         {strategy && <StrategyBadge strategy={strategy} />}
+        {strategy?.fingerprint && (
+          <span className="text-fg-subtle text-2xs ns-ltr" data-testid="strategy-fingerprint">
+            {strategy.fingerprint}
+          </span>
+        )}
         <div className="ms-auto flex items-center gap-1.5">
           <SegmentedControl
             size="sm"
@@ -297,37 +308,40 @@ export function SignalPanel() {
         {/* Decision summary: الاتجاه؟ هل في صفقة؟ ليش؟ */}
         <div
           data-testid="decision-summary"
-          className="border-line flex w-52 shrink-0 flex-col gap-2 border-e pe-3 @5xl:w-64"
+          className="border-line flex w-48 shrink-0 flex-col gap-1.5 border-e pe-3 @5xl:w-60"
         >
           <div
             data-testid="signal-badge"
             data-decision={x.decision}
             className={cn(
-              'ns-decision rounded-lg border px-3 py-2 text-center text-base font-bold',
+              'ns-decision rounded-lg border px-2.5 py-1.5 text-center',
               DECISION_STYLE[x.decision],
             )}
           >
-            <span className={cn(x.decision === 'ANALYSIS_ONLY' && 'text-sm font-semibold')}>
+            <span
+              className={cn(
+                'block font-bold',
+                x.decision === 'ANALYSIS_ONLY' ? 'text-sm' : 'text-base leading-6',
+              )}
+            >
               {x.decisionLabel}
             </span>
-            {confirmed && forward && (
-              <span className="text-2xs mt-0.5 block font-medium opacity-80">اختبار مباشر</span>
-            )}
+            <span
+              data-testid={x.decision === 'ANALYSIS_ONLY' ? 'research-only' : 'decision-headline'}
+              className={cn(
+                'text-2xs block leading-4 font-medium',
+                x.decision === 'ANALYSIS_ONLY' ? 'text-warning' : 'opacity-80',
+              )}
+            >
+              {confirmed && forward ? `${x.headline} · اختبار مباشر` : x.headline}
+            </span>
           </div>
-          {x.decision === 'ANALYSIS_ONLY' && (
-            <p className="text-warning text-2xs" data-testid="research-only">
-              {ANALYSIS_ONLY_TEXT}
-            </p>
-          )}
-          {x.biasLabel && (
+          {x.decision === 'ANALYSIS_ONLY' && x.biasLabel && (
             <div
               data-testid="analysis-bias"
               data-bias={x.bias}
               title="ميل تحليلي من الاتجاه والهيكل — ليس إشارة تداول"
-              className={cn(
-                'flex items-center justify-between rounded-md border border-dashed px-2 py-1 text-xs',
-                'border-line-strong',
-              )}
+              className="border-line-strong flex items-center justify-between rounded-md border border-dashed px-2 py-0.5 text-xs"
             >
               <span className="text-fg-subtle">الميل التحليلي</span>
               <span className={cn('font-semibold', DIRECTION_TEXT[x.bias ?? 'neutral'])}>
@@ -335,8 +349,8 @@ export function SignalPanel() {
               </span>
             </div>
           )}
-          <dl className="flex flex-col gap-1 text-xs">
-            <div className="flex items-baseline gap-1.5" data-testid="decision-direction">
+          <dl className="flex flex-col gap-0.5 text-xs">
+            <div className="flex min-w-0 items-baseline gap-1.5" data-testid="decision-direction">
               <dt className="text-fg-subtle shrink-0">الاتجاه؟</dt>
               <dd
                 title={x.direction.detail}
@@ -348,15 +362,18 @@ export function SignalPanel() {
                 {x.direction.label}
               </dd>
             </div>
-            <div className="flex items-baseline gap-1.5" data-testid="decision-trade">
+            <div className="flex min-w-0 items-baseline gap-1.5" data-testid="decision-trade">
               <dt className="text-fg-subtle shrink-0">هل في صفقة؟</dt>
-              <dd className="line-clamp-2" title={x.tradeLine}>
+              <dd className="truncate font-semibold" title={x.tradeLine}>
                 {x.tradeLine}
               </dd>
             </div>
-            <div className="flex items-baseline gap-1.5" data-testid="signal-state">
+            <div className="flex min-w-0 items-baseline gap-1.5" data-testid="signal-state">
               <dt className="text-fg-subtle shrink-0">ليش؟</dt>
-              <dd className="text-fg-muted line-clamp-2" title={x.reason}>
+              <dd
+                className="text-fg-muted truncate @5xl:line-clamp-2 @5xl:whitespace-normal"
+                title={x.reason}
+              >
                 {x.reason}
               </dd>
             </div>
@@ -406,11 +423,6 @@ export function SignalPanel() {
               </span>
             )}
           </div>
-          {strategy?.fingerprint && (
-            <p className="text-fg-subtle text-2xs ns-ltr" data-testid="strategy-fingerprint">
-              {strategy.fingerprint}
-            </p>
-          )}
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col gap-2">
@@ -423,12 +435,13 @@ export function SignalPanel() {
           ) : (
             <div
               data-testid="entry-blockers"
-              className="bg-sunken/60 border-line rounded-lg border px-2.5 py-1.5"
+              title={x.blockers.join('\n')}
+              className="bg-sunken/60 border-line rounded-lg border px-2.5 py-1"
             >
               <h3 className="text-xs font-semibold">ما الذي يمنع الدخول حالياً؟</h3>
               {x.blockers.length > 0 ? (
-                <ul className="text-fg-muted text-2xs mt-1 grid gap-x-4 gap-y-0.5 @5xl:grid-cols-2">
-                  {x.blockers.slice(0, 6).map((b) => (
+                <ul className="text-fg-muted text-2xs mt-0.5 grid grid-cols-2 gap-x-4 gap-y-0.5">
+                  {x.blockers.slice(0, 4).map((b) => (
                     <li key={b} className="flex min-w-0 items-baseline gap-1.5" title={b}>
                       <span aria-hidden className="bg-bear/70 size-1 shrink-0 rounded-full" />
                       <span className="truncate">{b}</span>
@@ -442,7 +455,7 @@ export function SignalPanel() {
           )}
           <ul
             aria-label="شرح التحليل"
-            className="ns-scroll grid max-h-40 grid-cols-2 gap-1 overflow-y-auto @5xl:max-h-52 @6xl:grid-cols-3"
+            className="ns-scroll grid grid-cols-3 gap-x-1 gap-y-0.5 @5xl:max-h-52 @5xl:overflow-y-auto"
           >
             {x.categories.map((row) => (
               <CategoryCell key={row.key} row={row} />
