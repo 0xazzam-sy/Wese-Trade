@@ -173,3 +173,95 @@ Only Stage B passes may proceed to Stage C (trade-plan construction).
 - The same IC statistic as §5, with targets measured from the +20 s price.
 - Pass: |t| ≥ 3 pooled, the same sign in ≥ 5 of 6 symbols, and the same sign in both halves
   (before / after 2026-07-05).
+
+## 7. Results (development segments only; validation and the holdout were not opened)
+
+### 7.1 Data actually collected
+
+| Source | Coverage | Quality |
+| --- | --- | --- |
+| Trade archive → 5 s flow buckets | 12 symbols × 367 archive days (2025-10-06 → 2026-10-07); **5,469,567,806 trades** | 0 duplicates, 0 out-of-order, 0 outside-day, 0 bad rows, 0 missing days |
+| L2 400-level archive → 5 s book features | 6 symbols × 26 days (every 2nd day 2026-06-10 → 07-30); **811,906,650 book messages**; 14,976 snapshots | 0 crossed books, 0 out-of-order, every 5 s bucket filled |
+| Live collector (prospective: trades-all, books5, OI, funding, liquidations) | Running since 2026-10-08 in an ephemeral container | Gaps (container restarts) are logged, not filled with invented data |
+
+**Transient download failures.** 135 day files were marked missing when the container lost its
+network. All of them were verified as available and re-ingested.
+
+### 7.2 Stage A — feature signal (trade flow, 12 symbols, 177 days)
+
+**Every trade-flow feature has a negative IC: aggressive flow mean-reverts.**
+
+- This holds for A1, A2, A3, A5, A7 and A8, on every timeframe.
+- Examples (+20 s latency):
+  - 1m A2, H1: IC −0.014, t −23.6;
+  - 5m A7, H5: IC −0.031, t −21.3;
+  - 10m A2, H10: IC −0.032, t −17.2.
+- Each is the same sign in 12 of 12 symbols and in both halves. The Stage A gate is passed with
+  the *opposite* sign to every pre-registered setup.
+
+**Order book (6 symbols, 26 days).**
+
+- Passes:
+  - O4 (25 bp depth imbalance), 10m, H10: IC +0.028, t 4.1, 6 of 6 symbols;
+  - O2 / O3, 5m, H1.
+- The O2 / O3 IC is **+0.047 / +0.038 at +0 s and flips to −0.020 at +20 s**. The top-of-book
+  signal is consumed before a manual entry is possible.
+- O6 (spread in bp) shows a large IC (+0.10 to +0.26). This is a **price-level artifact** (tick
+  size ÷ price, ranked within the same day), not a directional signal. It was pre-registered as
+  context only and excluded from the gate.
+
+### 7.3 Stage B — setup directional edge (+20 s entry reference)
+
+- 60 cells: 5 setups × 3 timeframes × 4 horizons.
+- **One cell passed the bar: 5m B-E (momentum impulse), H5.**
+  - n = 5,751; mean +11.0 bp; t 2.5.
+  - Concentration check (Stage F rule, applied here):
+    - **One day, 2025-10-10 (the liquidation crash), contributes +64,579 bp while the whole sample sums to +63,376 bp.**
+    - Without it the mean is −0.2 bp; without the top 5 days it is −2.0 bp.
+    - The median is −4.0 bp; 44% of trades are positive; the day-block 90% CI is −2.0 … +32.3 bp.
+  - **Rejected: a single-event artifact.**
+- Every other setup is below 9 bp, or fails the per-symbol or half-sample test. The best
+  non-crash-driven means are around +2 to +4 bp.
+
+### 7.4 Size of the real effects (diagnostic, development, crash day excluded)
+
+**Fading extreme flow** (the direction Stage A supports), mean signed bp from the +20 s price:
+
+| Timeframe | Fade signal | 5 min | 10 min | 30 min |
+| --- | --- | --- | --- | --- |
+| 1m | \|A3\| ≥ 3.5 | +0.7 | +1.2 | +1.4 |
+| 5m | \|A3\| ≥ 3.5 | +0.6 | +1.3 | +0.9 |
+| 10m | \|A3\| ≥ 3.5 | +1.7 | +2.4 | +2.2 |
+| any | \|A7\| extremes | — | — | −5.5 to +2.0 |
+
+- Medians are positive (+2 to +7 bp), but the continuation tails cancel them in the mean.
+
+**Order-book depth imbalance:**
+
+- |O4| ≥ 0.2: +0.3 to +0.8 bp.
+- The rarer |O4| ≥ 0.4 cells are negative.
+
+**Cost hurdle.**
+
+- Round-trip taker + slippage ≈ 14 bp; maker / maker ≈ 4 bp before adverse selection.
+- **No real microstructure effect reaches even the maker hurdle after manual latency.**
+
+### 7.5 Verdict
+
+- The microstructure data is real, complete and clean, and it **does contain statistically
+  robust information**.
+- Its tradable size after a 20 s manual-entry delay is **0–2.5 bp**, an order of magnitude
+  below costs.
+- The only information large enough to matter (top-of-book state) **decays and reverses within
+  20 s**. It would require automated sub-second execution, which is outside the scope of a
+  manual phone-trading product.
+- OI and liquidation features have **no usable history**. They remain AWAITING PROSPECTIVE DATA
+  (the collector is built and running).
+- **Stages C–G were not run**, because no setup earned them. Validation and holdout segments
+  remain sealed.
+
+| Timeframe | READY | Blocker |
+| --- | --- | --- |
+| 1m | **NO** | NO EDGE (trade flow + order book tested); OI / liquidations: INSUFFICIENT MICROSTRUCTURE HISTORY |
+| 5m | **NO** | NO EDGE (the only pass = a single crash day); OI / liquidations: INSUFFICIENT MICROSTRUCTURE HISTORY |
+| 10m | **NO** | NO EDGE; OI / liquidations: INSUFFICIENT MICROSTRUCTURE HISTORY |
