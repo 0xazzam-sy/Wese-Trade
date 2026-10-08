@@ -167,3 +167,73 @@ Walk-forward uses the 4 quarterly folds of Phase 5 (expanding training window).
   live signals are tracked in their own forward namespace (`scalp-6`), separate from Strategy 4.2.
 - A timeframe that fails stays «تحليل فقط» **for signals**. Its analysis (EMA, S/R, liquidity,
   structure, regime, direction) still ships.
+
+---
+
+## 6. Pre-result engineering fixes (made before any trade outcome was read)
+
+These were found from **trigger counts and level statistics only**. No P&L had been computed when
+they were fixed (commit `ec8345a`):
+- **Level touches counted chop.** Price oscillating around a level counted a touch on every
+  candle, so every level graded "strong". A touch now counts only on a genuine revisit (≥ 1 ATR
+  away since the last one).
+- **Break / flip lifecycle.** A break is a decisive close beyond the level by more than 0.5 ATR.
+  The first break flips the level's role. A level broken back again is chop and is removed.
+- **Swing seeding bug.** New swings were detected by list length, and the list is capped at 40,
+  so levels stopped being seeded after 40 swings. The tracker now returns the swings each candle
+  confirms.
+- **Breakout one-shot guard.** It used Python object ids, which are reused after garbage
+  collection, so new levels were treated as "already used" and family B fired 21 times in
+  180 k candles. It is now a flag on the level.
+- **Grade cut-offs.** Taken from the level-strength distribution, not from outcomes: strong
+  ≥ p80 (7.9), medium ≥ p45 (3.8), measured over 25 k level samples on BTC 1m, ETH 5m and DOGE 5m
+  development data.
+
+## 7. Development results (pre-registered grid, development segment only)
+
+Net = after fees and slippage, base costs. 12 symbols. 64 configurations per timeframe.
+"/day" = signals per day across the whole universe. "L / S" = BUY / SELL net expectancy.
+
+| TF | Days | Configs net E > 0 | Architecture | Best config | Trades | Win | Gross | After fees | **Net** | PF | Max DD | /day | L / S |
+| --- | ---: | ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 1m | 176 | **0 / 64** | A | ctx 5m+10m, EMA 9/21/50, T 70, market | 14,593 | 40.6% | −0.001 | −0.112 | **−0.180** | 0.69 | 2,655 R | 83 | −0.21 / −0.16 |
+| | | | B | ctx 5m+10m, EMA 20/50/200, T 60, market | 633 | 36.8% | −0.022 | −0.140 | **−0.220** | 0.66 | 145 R | 3.6 | −0.17 / −0.28 |
+| | | | C | ctx 5m+10m, EMA 20/50/200, T 60, market | 3,049 | 36.5% | −0.032 | −0.148 | **−0.225** | 0.67 | 688 R | 17 | −0.21 / −0.24 |
+| | | | D | ctx 5m+10m, EMA 9/21/50, T 70, market | 11,955 | 40.3% | −0.000 | −0.111 | **−0.180** | 0.69 | 2,179 R | 68 | −0.22 / −0.14 |
+| 5m | 541 | **0 / 64** | A | ctx 15m+1h, EMA 20/50/200, T 60, market | 28,175 | 39.9% | +0.025 | −0.068 | **−0.120** | 0.80 | 3,384 R | 52 | −0.13 / −0.11 |
+| | | | B | ctx 15m+1h, EMA 20/50/200, T 60, market | 5,499 | 34.8% | +0.013 | −0.092 | **−0.153** | 0.78 | 843 R | 10 | −0.19 / −0.11 |
+| | | | C | ctx 15m+1h, EMA 20/50/200, T 70, market | 9,118 | 35.5% | −0.003 | −0.104 | **−0.163** | 0.76 | 1,482 R | 17 | −0.18 / −0.15 |
+| | | | D | ctx 15m+1h, EMA 9/21/50, T 70, limit | 21,880 | 37.1% | −0.009 | −0.088 | **−0.125** | 0.80 | 2,738 R | 40 | −0.14 / −0.11 |
+| 10m | 541 | **0 / 64** | A | ctx 30m+1h, EMA 9/21/50, T 70, market | 19,656 | 41.6% | +0.025 | −0.046 | **−0.085** | 0.85 | 1,678 R | 36 | −0.11 / −0.06 |
+| | | | B | ctx 15m+30m, EMA 9/21/50, T 70, market | 5,276 | 33.6% | −0.005 | −0.102 | **−0.158** | 0.77 | 840 R | 10 | −0.20 / −0.12 |
+| | | | C | ctx 30m+1h, EMA 9/21/50, T 60, market | 17,151 | 34.3% | +0.009 | −0.087 | **−0.141** | 0.79 | 2,427 R | 32 | −0.16 / −0.12 |
+| | | | D | ctx 15m+30m, EMA 9/21/50, T 70, market | 17,987 | 40.6% | +0.027 | −0.048 | **−0.089** | 0.84 | 1,609 R | 33 | −0.12 / −0.06 |
+
+D with a limit entry (5m) missed 22,541 entries (no fill before TP1 or the stop). They are counted
+as no trade.
+
+## 8. Verdict
+
+**No scalp-6 architecture passes G1 on any timeframe.** That covers trend continuation (A),
+momentum breakout (B), liquidity sweep / reversal (C) and the regime-adaptive combination (D),
+in all 192 pre-registered configurations. Validation was never evaluated, and the holdout is
+**still sealed**.
+
+**Why.** Across all four architectures, the gross expectancy of 1m–10m setups built from
+OHLCV-based analysis (EMA, S/R, liquidity, structure, momentum, volume, regime) is ≈ 0 (between
+−0.03 and +0.03 R). Realistic manual-execution friction costs 0.07–0.18 R per trade, so every
+configuration ends at −0.08 R or worse:
+- the costs are taker fees + spread/slippage on entries, stops and time exits;
+- the friction blocker already rejects most structurally tight setups.
+
+This repeats, with a completely different signal model, the Phase 5 finding (LTF-5.0/5.1).
+Together the two phases cover 5 distinct strategy designs and 312 configurations on 12 symbols.
+Win rates of 34–42% with these losses show that a "high-accuracy" presentation would be
+misleading.
+
+**Consequence.**
+- BUY/SELL on 1m / 5m / 10m are **not activated**.
+- The scalp-6 **analysis** (EMA, support/resistance with strength, liquidity, structure, regime,
+  direction) is sound and does not depend on signal profitability. Per §5 it can ship for these
+  timeframes.
+- Strategy 4.2 (15m/30m/1h) is unchanged.
