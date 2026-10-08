@@ -65,6 +65,8 @@ async def default_connector(url: str) -> WebSocketLike:
 
 
 def _arg_json(arg: Arg) -> dict[str, str]:
+    if arg[0] == "liquidation-orders":  # subscribed per instrument type, not per instrument
+        return {"channel": arg[0], "instType": arg[1]}
     return {"channel": arg[0], "instId": arg[1]}
 
 
