@@ -9,6 +9,7 @@ from app.analysis.service import AnalysisService
 from app.auth.rate_limit import LoginRateLimiter
 from app.core.config import Settings
 from app.db.session import Database
+from app.execution.service import ExecutionService
 from app.forward_test.service import ForwardTestService
 from app.market_data.engine import MarketDataEngine
 from app.news.service import NewsService
@@ -27,6 +28,7 @@ class AppResources:
     analysis: AnalysisService | None = None
     signals: SignalService | None = None
     forward_test: ForwardTestService | None = None
+    execution: ExecutionService | None = None
     news: NewsService | None = None
     weather: WeatherService | None = None
     # Set by the desktop entrypoint: asks uvicorn to exit gracefully.

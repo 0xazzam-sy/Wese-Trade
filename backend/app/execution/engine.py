@@ -501,6 +501,7 @@ def confirm(ev: Evaluation, f: Features) -> ExecutionSignal | None:
         if ev.micro is None
         else {"status": ev.micro.status, "spread_bp": ev.micro.spread_bp},
         state_time=f.close_time,
+        cursor=f.close_time,
     )
     s.history.append((f.close_time, ExecState.READY.value))
     return s
@@ -519,8 +520,9 @@ def advance(
 ) -> bool:
     """Advance one closed candle after confirmation. Returns True if the state changed.
     Same-candle stop and target: the stop counts first (conservative)."""
-    if not s.is_open or close_time <= s.confirmed_time:
+    if not s.is_open or close_time <= max(s.confirmed_time, s.cursor):
         return False
+    s.cursor = close_time
     before = s.state
     d, p = s.side, s.plan
     s.bars += 1

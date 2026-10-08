@@ -80,6 +80,8 @@ class Settings(BaseSettings):
     okx_public_ws_url: str = "wss://ws.okx.com/ws/v5/public"  # port 443 (not 8443)
     okx_business_ws_url: str = "wss://ws.okx.com/ws/v5/business"  # candle channels
     market_stale_after_seconds: float = Field(default=60.0, ge=5)
+    # Live microstructure (books5 + trades) for 1m/5m/10m execution quality; optional.
+    execution_micro_enabled: bool = True
 
     # News (display only, never consumed by signals). Arabic RSS feeds, comma separated.
     news_enabled: bool = True

@@ -41,6 +41,9 @@ class EventType(StrEnum):
     SIGNAL_UPDATED = "signal.updated"  # close-time evaluation or lifecycle change
     SIGNAL_CLOSED = "signal.closed"  # final state (tp3 / stop / expiry / invalidation / time)
 
+    # --- Execution timing (v1.1) -----------------------------------------------------
+    EXECUTION_UPDATE = "execution.update"  # 1m/5m/10m entry timing for a Strategy 4.2 parent
+
     # --- Reserved for later phases (never emitted yet) -------------------------
 
 

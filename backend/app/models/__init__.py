@@ -1,5 +1,6 @@
 """ORM models. Import every model here so Alembic autogenerate can discover it."""
 
+from app.models.execution import ExecutionSignalRecord
 from app.models.forward_test import (
     ForwardTestCheckpoint,
     ForwardTestCursor,
@@ -12,6 +13,7 @@ from app.models.user import User, UserRole
 
 __all__ = [
     "BacktestRunRecord",
+    "ExecutionSignalRecord",
     "ForwardTestCheckpoint",
     "ForwardTestCursor",
     "ForwardTestOutcome",

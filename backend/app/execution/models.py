@@ -220,6 +220,7 @@ class ExecutionSignal:
     targets_hit: int = 0
     closed_time: int | None = None
     bars: int = 0
+    cursor: int = 0  # close time of the last candle applied to the lifecycle
     history: list[tuple[int, str]] = field(default_factory=list)
 
     @property

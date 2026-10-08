@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from app.api.v1.endpoints import (
     analysis,
     auth,
+    execution,
     forward_test,
     health,
     markets,
@@ -24,6 +25,7 @@ api_router.include_router(markets.router)
 api_router.include_router(analysis.router)
 api_router.include_router(signals.router)
 api_router.include_router(forward_test.router)
+api_router.include_router(execution.router)
 api_router.include_router(users.router)
 api_router.include_router(weather.router)
 api_router.include_router(system.router)

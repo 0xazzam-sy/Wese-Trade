@@ -19,6 +19,8 @@ from app.core.logging import configure_logging, get_logger
 from app.core.runtime import BACKEND_DIR
 from app.core.state import AppResources
 from app.db.session import Database
+from app.execution.micro import MicroFeed
+from app.execution.service import ExecutionService
 from app.forward_test.bootstrap import ensure_run, okx_active_symbols
 from app.forward_test.service import ForwardTestService
 from app.market_data.factory import build_market_engine
@@ -58,6 +60,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     if signals is not None and forward_test is not None:
         signals.excluded = forward_test.owns
         signals.delegate = forward_test
+    execution = (
+        ExecutionService(
+            analysis,
+            market,
+            database,
+            forward_test,
+            MicroFeed(settings.okx_public_ws_url) if settings.execution_micro_enabled else None,
+        )
+        if analysis is not None and market is not None
+        else None
+    )
     news = NewsService(settings, cache_file=settings.paths.cache / "news.json")
     weather = WeatherService(settings)
     resources = AppResources(
@@ -69,6 +82,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         analysis=analysis,
         signals=signals,
         forward_test=forward_test,
+        execution=execution,
         news=news,
         weather=weather,
     )
@@ -100,10 +114,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await resources.signals.start()
         if resources.forward_test is not None:
             await resources.forward_test.start()
+        if resources.execution is not None:
+            await resources.execution.start()
         await news.start()
         yield
         await news.stop()
         await weather.close()
+        if resources.execution is not None:
+            await resources.execution.stop()
         if resources.forward_test is not None:
             await resources.forward_test.stop()
         if resources.signals is not None:
