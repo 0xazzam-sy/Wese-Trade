@@ -2,14 +2,14 @@ import type { ForwardStatus } from '@/types/forwardTest';
 
 /** Arabic product wording. Never: موثوق / مضمون / عالي الدقة / نسبة نجاح. */
 export const FORWARD_STATUS_AR: Record<ForwardStatus, string> = {
-  forward_testing: 'اختبار مباشر',
+  forward_testing: 'متابعة مباشرة',
   paused: 'متوقف',
   stopped: 'متوقف',
-  passed_forward_test: 'اجتاز الاختبار المباشر',
-  failed_forward_test: 'فشل الاختبار المباشر',
+  passed_forward_test: 'تحققت شروط الأداء',
+  failed_forward_test: 'لم تتحقق شروط الأداء',
 };
 
-export const FORWARD_DISCLAIMER = 'الإشارات قيد الاختبار وليست توصيات مضمونة.';
+export const FORWARD_DISCLAIMER = 'الإشارات تحليلية وليست توصيات مضمونة.';
 
 export const HEALTH_AR: Record<string, string> = {
   running: 'يعمل',

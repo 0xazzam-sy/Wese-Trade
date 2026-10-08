@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { FlaskConical } from 'lucide-react';
+import { Activity } from 'lucide-react';
 
 import { cn } from '@/lib/cn';
 import { forwardTestApi } from '@/services/api/forwardTest';
 
-import { FORWARD_DISCLAIMER, fmtR, statusTone } from './labels';
+import { FORWARD_DISCLAIMER, FORWARD_STATUS_AR, fmtR, statusTone } from './labels';
 
 /** Compact dashboard card: which strategy is being forward-tested and how it is doing. */
 export function ForwardTestCard() {
@@ -17,7 +17,7 @@ export function ForwardTestCard() {
   return (
     <section aria-label="استراتيجية الإشارات" className="ns-panel shrink-0 p-3">
       <header className="mb-2 flex items-center gap-2">
-        <FlaskConical className="text-accent size-4" />
+        <Activity className="text-accent size-4" />
         <h2 className="text-sm font-semibold">استراتيجية الإشارات</h2>
         {data?.run && (
           <span
@@ -27,14 +27,14 @@ export function ForwardTestCard() {
               statusTone(data.run.status),
             )}
           >
-            {data.run.status_ar}
+            {FORWARD_STATUS_AR[data.run.status]}
           </span>
         )}
       </header>
       {isError || !data ? (
-        <p className="text-fg-subtle text-2xs">حالة الاختبار المباشر غير متاحة.</p>
+        <p className="text-fg-subtle text-2xs">حالة متابعة الأداء غير متاحة.</p>
       ) : !data.run ? (
-        <p className="text-fg-subtle text-2xs">لا يوجد اختبار مباشر نشط.</p>
+        <p className="text-fg-subtle text-2xs">لا توجد متابعة أداء نشطة.</p>
       ) : (
         <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
           <dt className="text-fg-subtle">الإصدار</dt>

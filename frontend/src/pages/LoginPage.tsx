@@ -72,7 +72,7 @@ export function LoginPage() {
           </>
         )}
         <p className="text-fg-subtle text-2xs mt-6 text-center leading-5">
-          منصة للتحليل فقط — لا تنفّذ أي عمليات تداول.
+          تحليل وإشارات وتوقيت دخول — التنفيذ يدوي من قبلك.
         </p>
       </main>
     </div>

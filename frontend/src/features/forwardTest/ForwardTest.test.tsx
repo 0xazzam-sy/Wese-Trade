@@ -169,18 +169,18 @@ describe('ForwardTestCard', () => {
     render(<ForwardTestCard />);
     const section = await screen.findByLabelText('استراتيجية الإشارات');
     await waitFor(() => {
-      expect(within(section).getByTestId('forward-status')).toHaveTextContent('اختبار مباشر');
+      expect(within(section).getByTestId('forward-status')).toHaveTextContent('متابعة مباشرة');
     });
     expect(within(section).getByTestId('forward-fingerprint')).toHaveTextContent('4.2-a03e20f');
     expect(section).toHaveTextContent('4 / 150');
     expect(section).toHaveTextContent('+0.250R');
-    expect(section).toHaveTextContent('الإشارات قيد الاختبار وليست توصيات مضمونة.');
+    expect(section).toHaveTextContent('الإشارات تحليلية وليست توصيات مضمونة.');
   });
 
   it.each([
     ['paused', 'متوقف'],
-    ['failed_forward_test', 'فشل الاختبار المباشر'],
-    ['passed_forward_test', 'اجتاز الاختبار المباشر'],
+    ['failed_forward_test', 'لم تتحقق شروط الأداء'],
+    ['passed_forward_test', 'تحققت شروط الأداء'],
   ] as const)('renders the %s state', async (status, label) => {
     mockApi(status);
     render(<ForwardTestCard />);
@@ -196,10 +196,10 @@ describe('ForwardTestView', () => {
     const stats = await screen.findByTestId('stats');
     expect(screen.getByText('Wese Trade Forward 4.2')).toBeInTheDocument();
     expect(screen.getByTestId('fingerprint')).toHaveTextContent('4.2-a03e20f');
-    expect(screen.getByTestId('run-status')).toHaveTextContent('اختبار مباشر');
+    expect(screen.getByTestId('run-status')).toHaveTextContent('متابعة مباشرة');
     expect(screen.getByTestId('started-utc')).toHaveTextContent('2026-10-05 06:00:00 UTC');
     expect(screen.getByTestId('forward-disclaimer')).toHaveTextContent(
-      'الإشارات قيد الاختبار وليست توصيات مضمونة.',
+      'الإشارات تحليلية وليست توصيات مضمونة.',
     );
     expect(stats).toHaveTextContent('4 / 150');
     expect(stats).toHaveTextContent('+0.250R');
@@ -286,7 +286,7 @@ describe('ForwardTestView', () => {
     mockApi('failed_forward_test');
     render(<ForwardTestView />);
     await screen.findByTestId('stats');
-    expect(screen.getByTestId('run-status')).toHaveTextContent('فشل الاختبار المباشر');
+    expect(screen.getByTestId('run-status')).toHaveTextContent('لم تتحقق شروط الأداء');
     expect(screen.queryByTestId('forward-controls')).toBeNull();
   });
 

@@ -2,6 +2,7 @@ import { useAnalysisStore } from '@/stores/analysisStore';
 import { useChartStore } from '@/stores/chartStore';
 import type { ChartId } from '@/stores/layoutStore';
 import type { AnalysisSnapshot } from '@/types/analysis';
+import type { ExecutionState } from '@/types/execution';
 import type { Timeframe } from '@/types/market';
 import type { SignalView } from '@/types/signal';
 
@@ -43,15 +44,18 @@ export function useFocusedChartContext(): {
   context: ChartContext;
   snapshot: AnalysisSnapshot | null;
   view: SignalView | null;
+  execution: ExecutionState | null;
 } {
   const chartId = useAnalysisStore((s) => s.focused);
   const selection = useChartStore((s) => s.charts[chartId]);
   const rawSnapshot = useAnalysisStore((s) => s.byChart[chartId]);
   const rawView = useAnalysisStore((s) => s.signals[chartId]);
+  const rawExecution = useAnalysisStore((s) => s.executions[chartId]);
   const context = { chartId, symbol: selection.symbol, timeframe: selection.timeframe };
   return {
     context,
     snapshot: contextualSnapshot(rawSnapshot, context),
     view: contextualSignal(rawView, context),
+    execution: belongsTo(rawExecution, context) ? rawExecution : null,
   };
 }

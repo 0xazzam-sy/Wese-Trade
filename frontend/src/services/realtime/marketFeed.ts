@@ -1,5 +1,6 @@
 import { applySignalEvent, SIGNAL_EVENTS } from '@/features/signals/lib/reduce';
 import type { AnalysisSnapshot } from '@/types/analysis';
+import type { ExecutionState } from '@/types/execution';
 import type { SignalView } from '@/types/signal';
 import type { CandleBar, MarketFeedState, StreamState, Timeframe } from '@/types/market';
 import type { EventEnvelope } from '@/types/realtime';
@@ -16,6 +17,8 @@ export interface StreamHandlers {
   onAnalysis?: (snapshot: AnalysisSnapshot) => void;
   /** Signal view of this stream after each `signal.*` event (reduced, display only). */
   onSignal?: (view: SignalView) => void;
+  /** Execution timing of this stream (1m / 5m / 10m, `execution.update`). */
+  onExecution?: (state: ExecutionState) => void;
 }
 
 type TickHandler = (price: string, timestamp: string) => void;
@@ -52,6 +55,8 @@ export class MarketFeed {
   >();
   /** Latest reduced signal view per stream (replayed to charts joining an existing stream). */
   private readonly signals = new Map<string, SignalView>();
+  /** Latest execution state per stream (replayed to charts joining an existing stream). */
+  private readonly executions = new Map<string, ExecutionState>();
   private connectedOnce = false;
 
   attach(client: RealtimeClient): void {
@@ -97,6 +102,13 @@ export class MarketFeed {
           this.dispatchKey(key, (h) => h.onSignal?.(view));
         }),
       ),
+      client.subscribe('execution.update', (e) => {
+        const state = e.data as unknown as ExecutionState;
+        const key = keyOf(state.symbol, state.timeframe as Timeframe);
+        if (!this.streams.has(key)) return;
+        this.executions.set(key, state);
+        this.dispatchKey(key, (h) => h.onExecution?.(state));
+      }),
       client.subscribe('market.resync', (e) => {
         this.dispatch(e, (h) => h.onResync?.());
       }),
@@ -143,6 +155,8 @@ export class MarketFeed {
     if (cached?.live) handlers.onAnalysis?.(cached.live);
     const signal = this.signals.get(key);
     if (signal) handlers.onSignal?.(signal);
+    const execution = this.executions.get(key);
+    if (execution) handlers.onExecution?.(execution);
     return () => {
       const current = this.streams.get(key);
       if (!current) return;
@@ -151,6 +165,7 @@ export class MarketFeed {
         this.streams.delete(key);
         this.analysis.delete(key);
         this.signals.delete(key);
+        this.executions.delete(key);
         this.client?.send('market.unsubscribe', { symbol, timeframe });
       }
     };

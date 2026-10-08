@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { IconButton } from '@/components/ui/IconButton';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { AnalysisDebug } from '@/features/analysis/components/AnalysisDebug';
+import { ExecutionPanel } from '@/features/execution/ExecutionPanel';
+import { isExecutionTimeframe } from '@/features/execution/model';
 import { NOT_READY_AR } from '@/features/analysis/lib/labels';
 import { timeframeLabel } from '@/features/analysis/lib/panelMetrics';
 import { useSymbolMap } from '@/features/markets/queries';
@@ -114,7 +116,7 @@ function StrategyBadge({ strategy }: { strategy: StrategyInfo }) {
     <span
       data-testid="strategy-status"
       data-status={strategy.status}
-      title={`${strategy.status_ar} — ${strategy.note_ar} (${strategy.version}${fp})`}
+      title={`Strategy 4.2 (${strategy.version}${fp})`}
       className={cn(
         'text-2xs ms-auto truncate rounded-md border px-1.5 py-0.5 font-medium',
         forward
@@ -122,7 +124,7 @@ function StrategyBadge({ strategy }: { strategy: StrategyInfo }) {
           : 'border-warning/40 bg-warning/10 text-warning',
       )}
     >
-      {forward ? strategy.status_ar : `${strategy.label_ar} · ${strategy.status_ar}`}
+      Strategy 4.2
     </span>
   );
 }
@@ -154,7 +156,6 @@ const DECISION_STYLE: Record<Decision, string> = {
   BUY: SIGNAL_CLASS_STYLE.BUY,
   SELL: SIGNAL_CLASS_STYLE.SELL,
   NEUTRAL: 'bg-neutral-soft text-fg border-line',
-  ANALYSIS_ONLY: 'bg-transparent text-fg-muted border-dashed border-line-strong',
 };
 
 function CategoryCell({ row }: { row: CategoryRow }) {
@@ -216,11 +217,21 @@ function statusText(snapshot: AnalysisSnapshot | null): string | null {
 export function SignalPanel() {
   const setFocused = useAnalysisStore((s) => s.setFocused);
   // Canonical context: never shows analysis of another symbol/timeframe than the chart.
-  const { context, snapshot, view } = useFocusedChartContext();
+  const { context, snapshot, view, execution } = useFocusedChartContext();
   const focused = context.chartId;
   const symbols = useSymbolMap();
   const [debugOpen, setDebugOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  if (isExecutionTimeframe(context.timeframe)) {
+    return (
+      <ExecutionPanel
+        context={context}
+        execution={execution}
+        snapshot={snapshot}
+        onFocus={setFocused}
+      />
+    );
+  }
   const status = statusText(snapshot);
   const strategy = view?.strategy ?? null;
   const x = explain(snapshot, view, strategy);
@@ -230,7 +241,6 @@ export function SignalPanel() {
   const precision = symbols.get(context.symbol)?.price_precision;
   const values = planValues(plan, precision);
   const scoreValue = x.score === null ? 0 : Math.round(x.score);
-  const forward = strategy?.forward_test === true || Boolean(strategy?.fingerprint);
 
   return (
     <section
@@ -319,25 +329,15 @@ export function SignalPanel() {
               DECISION_STYLE[x.decision],
             )}
           >
+            <span className="block text-base leading-6 font-bold">{x.decisionLabel}</span>
             <span
-              className={cn(
-                'block font-bold',
-                x.decision === 'ANALYSIS_ONLY' ? 'text-sm' : 'text-base leading-6',
-              )}
+              data-testid="decision-headline"
+              className="text-2xs block leading-4 font-medium opacity-80"
             >
-              {x.decisionLabel}
-            </span>
-            <span
-              data-testid={x.decision === 'ANALYSIS_ONLY' ? 'research-only' : 'decision-headline'}
-              className={cn(
-                'text-2xs block leading-4 font-medium',
-                x.decision === 'ANALYSIS_ONLY' ? 'text-warning' : 'opacity-80',
-              )}
-            >
-              {confirmed && forward ? `${x.headline} · اختبار مباشر` : x.headline}
+              {x.headline}
             </span>
           </div>
-          {x.decision === 'ANALYSIS_ONLY' && x.biasLabel && (
+          {x.decision === 'NEUTRAL' && x.biasLabel && (
             <div
               data-testid="analysis-bias"
               data-bias={x.bias}
@@ -468,7 +468,6 @@ export function SignalPanel() {
       <p className="text-fg-subtle text-2xs mt-2 flex items-center gap-1.5">
         <Info className="size-3" />
         {RISK_NOTE} {SCORE_TOOLTIP}
-        {strategy && <span data-testid="strategy-note"> {strategy.note_ar}</span>}
       </p>
       {import.meta.env.DEV && debugOpen && <AnalysisDebug snapshot={snapshot} />}
     </section>

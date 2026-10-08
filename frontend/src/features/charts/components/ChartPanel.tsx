@@ -3,6 +3,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnalysisOverlay, readOverlayPalette } from '@/features/analysis/overlays/AnalysisOverlay';
 import { buildOverlayModel } from '@/features/analysis/overlays/overlayModel';
 import { useMarketChart } from '@/features/charts/hooks/useMarketChart';
+import { ExecutionStatus } from '@/features/execution/ExecutionStatus';
+import {
+  executionMarkers,
+  executionPlanLines,
+  isExecutionTimeframe,
+  levelLines,
+} from '@/features/execution/model';
 import type { ChartController } from '@/features/charts/lib/ChartController';
 import { useSymbolMap } from '@/features/markets/queries';
 import { buildMarkerSpecs, openSignal } from '@/features/signals/chart/chartSignals';
@@ -51,7 +58,7 @@ export function ChartPanel({ chartId, className }: { chartId: ChartId; className
   const onController = useCallback((controller: ChartController | null) => {
     controllerRef.current = controller;
   }, []);
-  const { load, stream, analysis, signal, reload } = useMarketChart(
+  const { load, stream, analysis, signal, execution, reload } = useMarketChart(
     controllerRef,
     selection.symbol,
     selection.timeframe,
@@ -63,6 +70,8 @@ export function ChartPanel({ chartId, className }: { chartId: ChartId; className
   // from the analysis annotations. The open one drives the trade-plan lines and status card.
   const signals = useChartSignals(selection.symbol, selection.timeframe, signal);
   const open = useMemo(() => openSignal(signals), [signals]);
+  // 1m / 5m / 10m: entry timing for the active Strategy 4.2 setup (execution layer).
+  const executionTf = isExecutionTimeframe(selection.timeframe);
 
   // Backend analysis -> chart overlays (drawing only) and the shared analysis panel.
   const [pointer, setPointer] = useState<MarkerPointer | null>(null);
@@ -73,6 +82,7 @@ export function ChartPanel({ chartId, className }: { chartId: ChartId; className
   const theme = useThemeStore((s) => s.theme);
   const setAnalysis = useAnalysisStore((s) => s.setAnalysis);
   const setSignal = useAnalysisStore((s) => s.setSignal);
+  const setExecution = useAnalysisStore((s) => s.setExecution);
   const setFocused = useAnalysisStore((s) => s.setFocused);
   const setLoading = useAnalysisStore((s) => s.setLoading);
   const focusedChart = useAnalysisStore((s) => s.focused);
@@ -80,29 +90,45 @@ export function ChartPanel({ chartId, className }: { chartId: ChartId; className
     setLoading(chartId, load.status === 'loading');
   }, [chartId, load.status, setLoading]);
   useEffect(() => {
-    overlay.setModel(buildOverlayModel(analysis, toggles, open), readOverlayPalette());
-  }, [overlay, analysis, open, toggles, theme]);
+    const extra = executionTf
+      ? [
+          ...executionPlanLines(execution, toggles),
+          ...levelLines(execution, toggles, analysis?.candle_time ?? 0),
+        ]
+      : [];
+    overlay.setModel(
+      buildOverlayModel(analysis, toggles, executionTf ? null : open, extra),
+      readOverlayPalette(),
+    );
+  }, [overlay, analysis, open, toggles, theme, execution, executionTf]);
   const historyReady = load.status === 'ready';
   useEffect(() => {
     const chart = controllerRef.current;
-    const specs = historyReady
-      ? buildMarkerSpecs(signals, toggles.signals, (t) => chart?.hasTime(t) ?? false)
-      : [];
+    const has = (t: number) => chart?.hasTime(t) ?? false;
+    const specs = !historyReady
+      ? []
+      : executionTf
+        ? executionMarkers(execution, toggles.signals, has)
+        : buildMarkerSpecs(signals, toggles.signals, has);
     markers.setMarkers(toSeriesMarkers(specs, readOverlayPalette()));
-  }, [markers, signals, toggles.signals, historyReady, theme]);
-  const pointed = pointer ? signals.find((s) => s.id === pointer.id) : undefined;
+  }, [markers, signals, toggles.signals, historyReady, theme, execution, executionTf]);
+  const pointed = pointer && !executionTf ? signals.find((s) => s.id === pointer.id) : undefined;
   useEffect(() => {
     setAnalysis(chartId, analysis);
   }, [chartId, analysis, setAnalysis]);
   useEffect(() => {
     setSignal(chartId, signal);
   }, [chartId, signal, setSignal]);
+  useEffect(() => {
+    setExecution(chartId, execution);
+  }, [chartId, execution, setExecution]);
   useEffect(
     () => () => {
       setAnalysis(chartId, null);
       setSignal(chartId, null);
+      setExecution(chartId, null);
     },
-    [chartId, setAnalysis, setSignal],
+    [chartId, setAnalysis, setSignal, setExecution],
   );
 
   // Auto-retry while the backend is still loading exchange metadata.
@@ -126,7 +152,14 @@ export function ChartPanel({ chartId, className }: { chartId: ChartId; className
       onPointerDown={() => {
         setFocused(chartId); // the analysis panel describes the chart the user works with
       }}
-      data-markers={toggles.signals && historyReady ? signals.length : 0}
+      data-markers={
+        toggles.signals && historyReady
+          ? executionTf
+            ? (execution?.markers.length ?? 0)
+            : signals.length
+          : 0
+      }
+      data-execution={executionTf ? (execution?.evaluation?.decision ?? 'none') : undefined}
       data-focused={focusedChart === chartId}
       className={cn(
         'ns-panel ns-chart-panel @container flex min-h-0 min-w-0 flex-col overflow-hidden',
@@ -154,14 +187,18 @@ export function ChartPanel({ chartId, className }: { chartId: ChartId; className
           toggleMaximized(chartId);
         }}
       />
-      <ChartSignalStatus
-        timeframe={selection.timeframe}
-        open={open}
-        strategy={signal?.strategy ?? null}
-        precision={meta?.price_precision}
-      />
+      {executionTf ? (
+        <ExecutionStatus state={execution} precision={meta?.price_precision} />
+      ) : (
+        <ChartSignalStatus
+          timeframe={selection.timeframe}
+          open={open}
+          strategy={signal?.strategy ?? null}
+          precision={meta?.price_precision}
+        />
+      )}
       <div className="relative min-h-0 flex-1">
-        <CandlestickChart onController={onController} overlays={overlays} />
+        <CandlestickChart onController={onController} overlays={overlays} showEma={toggles.ema} />
         {pointed && pointer && (
           <SignalMarkerCard
             signal={pointed}

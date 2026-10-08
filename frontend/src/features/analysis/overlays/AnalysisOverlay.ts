@@ -72,6 +72,8 @@ const LINE_COLOR: Record<LineKind, keyof OverlayPalette> = {
   'plan-entry': 'accent',
   'plan-stop': 'bear',
   'plan-target': 'bull',
+  'sr-support': 'bull',
+  'sr-resistance': 'bear',
 };
 
 const TONE_COLOR: Record<Tone, keyof OverlayPalette> = {

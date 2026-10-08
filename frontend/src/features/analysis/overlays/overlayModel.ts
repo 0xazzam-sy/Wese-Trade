@@ -17,7 +17,9 @@ export type LineKind =
   | 'eq-line'
   | 'plan-entry'
   | 'plan-stop'
-  | 'plan-target';
+  | 'plan-target'
+  | 'sr-support'
+  | 'sr-resistance';
 export type Tone = 'bull' | 'bear' | 'neutral' | 'accent' | 'violet' | 'warning';
 
 export interface OverlayZone {
@@ -193,10 +195,12 @@ export function buildOverlayModel(
   snapshot: AnalysisSnapshot | null,
   toggles: OverlayToggles,
   openSignal: SignalDTO | null = null,
+  /** Extra backend-computed lines (execution plan, S/R levels with strength). */
+  extraLines: readonly OverlayLine[] = [],
 ): OverlayModel {
   // The trade plan comes from the signal, not the analysis: drawn even while analysis loads.
   if (!snapshot?.analysis_ready) {
-    const plan = tradePlanLines(openSignal, toggles);
+    const plan = [...tradePlanLines(openSignal, toggles), ...extraLines];
     return plan.length ? { zones: [], lines: plan, labels: [] } : EMPTY_MODEL;
   }
   const zones: OverlayZone[] = [];
@@ -386,7 +390,7 @@ export function buildOverlayModel(
     });
   }
 
-  lines.push(...tradePlanLines(openSignal, toggles));
+  lines.push(...tradePlanLines(openSignal, toggles), ...extraLines);
 
   return { zones, lines, labels };
 }

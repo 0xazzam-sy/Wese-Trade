@@ -1,4 +1,4 @@
-import { CandlestickSeries, createChart, type IChartApi } from 'lightweight-charts';
+import { CandlestickSeries, createChart, type IChartApi, LineSeries } from 'lightweight-charts';
 import { useEffect, useRef } from 'react';
 
 import { ChartController } from '@/features/charts/lib/ChartController';
@@ -16,10 +16,17 @@ interface CandlestickChartProps {
   /** Receives the controller once the chart exists (null on unmount). Must be stable. */
   onController: (controller: ChartController | null) => void;
   overlays?: readonly ChartOverlay[];
+  /** EMA 20 / 50 / 200 lines visible (overlay toggle). */
+  showEma?: boolean;
   className?: string;
 }
 
 const NO_OVERLAYS: readonly ChartOverlay[] = [];
+
+/** EMA 20 / 50 / 200 colors from the chart palette (fast = accent, slow = muted). */
+function emaColors(palette: ReturnType<typeof readChartPalette>): string[] {
+  return [palette.ema20, palette.ema50, palette.ema200];
+}
 /** Initial view after a history load: the most recent bars, so analysis overlays stay legible. */
 export const INITIAL_VISIBLE_BARS = 150;
 
@@ -30,11 +37,13 @@ export const INITIAL_VISIBLE_BARS = 150;
 export function CandlestickChart({
   onController,
   overlays = NO_OVERLAYS,
+  showEma = true,
   className,
 }: CandlestickChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const overlaysRef = useRef<OverlayController | null>(null);
+  const controllerRef = useRef<ChartController | null>(null);
   const seriesOptionsRef = useRef<((palette: ReturnType<typeof readChartPalette>) => void) | null>(
     null,
   );
@@ -46,6 +55,15 @@ export function CandlestickChart({
     const palette = readChartPalette();
     const chart = createChart(container, buildChartOptions(palette));
     const series = chart.addSeries(CandlestickSeries, buildCandlestickOptions(palette));
+    const emaLines = emaColors(palette).map((color) =>
+      chart.addSeries(LineSeries, {
+        color,
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      }),
+    );
     chartRef.current = chart;
     const resetView = () => {
       // A dragged/zoomed price axis turns auto-scale off; a new context must never keep
@@ -66,9 +84,12 @@ export function CandlestickChart({
           .setVisibleLogicalRange({ from: count - INITIAL_VISIBLE_BARS, to: count + 4 });
       },
       resetView,
+      emaLines,
     );
+    controllerRef.current = controller;
     seriesOptionsRef.current = (p) => {
       series.applyOptions(buildCandlestickOptions(p));
+      emaColors(p).forEach((color, i) => emaLines[i]?.applyOptions({ color }));
     };
     overlaysRef.current = new OverlayController({ chart, series });
     onController(controller);
@@ -89,6 +110,7 @@ export function CandlestickChart({
       overlaysRef.current?.clear();
       overlaysRef.current = null;
       onController(null);
+      controllerRef.current = null;
       chartRef.current = null;
       chart.remove();
     };
@@ -103,6 +125,10 @@ export function CandlestickChart({
   useEffect(() => {
     overlaysRef.current?.sync(overlays);
   }, [overlays]);
+
+  useEffect(() => {
+    controllerRef.current?.setEmaVisible(showEma);
+  }, [showEma]);
 
   // Charts are conventionally LTR (time flows left → right) even in an RTL app.
   return <div ref={containerRef} dir="ltr" className={cn('size-full', className)} />;

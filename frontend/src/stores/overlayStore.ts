@@ -9,7 +9,9 @@ export type OverlayKey =
   | 'premiumDiscount'
   | 'ote'
   | 'signals'
-  | 'tradePlan';
+  | 'tradePlan'
+  | 'ema'
+  | 'levels';
 
 export type OverlayToggles = Record<OverlayKey, boolean>;
 
@@ -23,9 +25,13 @@ export const DEFAULT_OVERLAYS: OverlayToggles = {
   ote: false,
   signals: true,
   tradePlan: true,
+  ema: true,
+  levels: true,
 };
 
 export const OVERLAY_LABELS: { key: OverlayKey; label: string }[] = [
+  { key: 'ema', label: 'المتوسطات · EMA 20/50/200' },
+  { key: 'levels', label: 'دعم ومقاومة · S/R' },
   { key: 'structure', label: 'هيكل السوق · Market Structure' },
   { key: 'liquidity', label: 'السيولة · Liquidity' },
   { key: 'orderBlocks', label: 'مناطق الأوامر · Order Blocks' },

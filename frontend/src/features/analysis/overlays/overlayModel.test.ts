@@ -15,6 +15,8 @@ const ALL_ON: OverlayToggles = {
   ote: true,
   signals: true,
   tradePlan: true,
+  ema: true,
+  levels: true,
 };
 const ALL_OFF: OverlayToggles = {
   structure: false,
@@ -25,6 +27,8 @@ const ALL_OFF: OverlayToggles = {
   ote: false,
   signals: false,
   tradePlan: false,
+  ema: false,
+  levels: false,
 };
 
 describe('buildOverlayModel', () => {
@@ -71,6 +75,8 @@ describe('buildOverlayModel', () => {
       ote: false,
       signals: true,
       tradePlan: true,
+      ema: true,
+      levels: true,
     });
   });
 

@@ -72,7 +72,7 @@ export function SignalMarkerCard({
         ))}
       </dl>
       <p className="text-fg-subtle text-2xs border-line mt-2 border-t pt-1.5">
-        {CHART_SIGNAL_AR.unproven} — {CHART_SIGNAL_AR.disclaimer}
+        {CHART_SIGNAL_AR.disclaimer}
       </p>
     </div>,
     document.body,

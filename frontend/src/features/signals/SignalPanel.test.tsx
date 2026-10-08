@@ -25,6 +25,7 @@ afterEach(() => {
   useAnalysisStore.setState({
     byChart: { primary: null, secondary: null },
     signals: { primary: null, secondary: null },
+    executions: { primary: null, secondary: null },
     focused: 'primary',
   });
 });
@@ -113,14 +114,14 @@ describe('SignalPanel (analysis)', () => {
 
   it('shows why analysis is unavailable', () => {
     render(<SignalPanel />);
-    setPrimary(notReady('insufficient_history'));
+    setPrimary(notReady('insufficient_history', 'BTCUSDT', '15m'));
     expect(screen.getByRole('status')).toHaveTextContent('بيانات غير كافية للتحليل');
     expect(panel()).toHaveAttribute('data-analysis-state', 'not-ready');
   });
 
   it('explains every analysis category with real snapshot values', () => {
     render(<SignalPanel />);
-    setPrimary(readySnapshot());
+    setPrimary(snap15());
     const list = within(screen.getByLabelText('شرح التحليل'));
     for (const label of CATEGORY_LABELS) expect(list.getByText(label)).toBeInTheDocument();
     expect(category('momentum')).toHaveTextContent('RSI 61');
@@ -182,7 +183,7 @@ describe('SignalPanel (analysis)', () => {
     );
     expect(panel()).toHaveAttribute('data-decision', 'BUY');
     expect(screen.getByTestId('signal-badge')).toHaveTextContent('BUY · شراء');
-    expect(screen.getByTestId('signal-badge')).toHaveTextContent('اختبار مباشر');
+    expect(screen.getByTestId('signal-badge')).not.toHaveTextContent('اختبار مباشر');
     expect(screen.getByTestId('signal-score')).toHaveTextContent('81/100');
     expect(panel().querySelector('[data-plan="Entry"]')).toHaveTextContent('2,485.14');
     expect(panel().querySelector('[data-plan="SL"]')).toHaveTextContent('2,467.73');
@@ -257,24 +258,15 @@ describe('SignalPanel (analysis)', () => {
     expect(panel().querySelector('[data-plan="Entry"]')?.textContent).toMatch(/99.*–.*100\.5/);
   });
 
-  it('research timeframes: analysis only with an analytical bias, never a trade', () => {
+  it('out-of-scope symbol on 15m: neutral, never «تحليل فقط»', () => {
     render(<SignalPanel />);
     setBoth(
-      readySnapshot({ timeframe: '5m' }),
-      view({
-        timeframe: '5m',
-        strategy: { ...FORWARD_STRATEGY, signal_capable: false },
-        evaluation: evaluation({ timeframe: '5m' }),
-      }),
+      snap15(),
+      view({ strategy: { ...FORWARD_STRATEGY, signal_capable: false }, evaluation: evaluation() }),
     );
-    expect(panel()).toHaveAttribute('data-decision', 'ANALYSIS_ONLY');
-    expect(screen.getByTestId('research-only')).toHaveTextContent(
-      'تحليل فقط — هذا الفريم غير مثبت للإشارات حتى الآن.',
-    );
-    const bias = screen.getByTestId('analysis-bias');
-    expect(bias).toHaveAttribute('data-bias', 'bullish');
-    expect(bias).toHaveTextContent('ميل صاعد');
-    expect(screen.getByTestId('signal-badge')).not.toHaveTextContent(/شراء|بيع|BUY|SELL/);
+    expect(panel()).toHaveAttribute('data-decision', 'NEUTRAL');
+    expect(screen.getByTestId('signal-badge')).toHaveTextContent('محايد');
+    expect(panel()).not.toHaveTextContent('تحليل فقط');
     expect(screen.queryByTestId('trade-plan')).toBeNull();
   });
 
@@ -296,9 +288,7 @@ describe('SignalPanel (analysis)', () => {
     }
     expect(text).not.toMatch(/\d\s*%\s*(نجاح|ربح)/);
     expect(screen.getByTestId('strategy-fingerprint')).toHaveTextContent('4.2-a03e20f');
-    expect(screen.getByTestId('strategy-note')).toHaveTextContent(
-      'الإشارات قيد الاختبار وليست توصيات مضمونة.',
-    );
+    expect(panel()).toHaveTextContent('ليست ضماناً للربح');
   });
 
   it('opens the details drawer with setup, factors and state', () => {
@@ -313,20 +303,22 @@ describe('SignalPanel (analysis)', () => {
     expect(drawer).toHaveTextContent('78/100');
   });
 
-  it('labels the unproven baseline as experimental, never as proven', () => {
+  it('production wording: Strategy 4.2 reference, no research/experimental labels', () => {
     render(<SignalPanel />);
     setBoth(snap15(), view({ active: signal() }));
     const badge = screen.getByTestId('strategy-status');
-    expect(badge).toHaveAttribute('data-status', 'unproven');
-    expect(badge).toHaveTextContent('تجريبي · غير مُثبت');
-    expect(panel()).toHaveTextContent('ليست توصية');
+    expect(badge).toHaveTextContent('Strategy 4.2');
+    const text = panel().textContent;
+    for (const w of ['تجريبي', 'غير مُثبت', 'تحليل فقط', 'اختبار مباشر'])
+      expect(text).not.toContain(w);
+    expect(panel()).toHaveTextContent('ليست ضماناً للربح');
   });
 
   it('switches between the primary and secondary chart analysis', () => {
     render(<SignalPanel />);
-    setPrimary(readySnapshot());
+    setPrimary(snap15());
     act(() => {
-      const snap = notReady('loading_history', 'ETHUSDT');
+      const snap = notReady('loading_history', 'ETHUSDT', '15m');
       select('secondary', snap);
       useAnalysisStore.getState().setAnalysis('secondary', snap);
     });

@@ -65,10 +65,10 @@ describe('SettingsView', () => {
     expect(screen.getByTestId('app-version')).toHaveTextContent('1.0.0');
     expect(screen.getByText('viewer-user')).toBeInTheDocument();
     expect(screen.getByText('مشاهد')).toBeInTheDocument();
-    expect(await screen.findByText('اختبار مباشر')).toBeInTheDocument();
+    expect(await screen.findByText('متابعة مباشرة')).toBeInTheDocument();
     expect(screen.getByLabelText('مزود بيانات السوق')).toHaveTextContent('OKX');
     expect(screen.getByTestId('settings-view')).toHaveTextContent(
-      'الإشارات قيد الاختبار وليست توصيات مضمونة',
+      'الإشارات تحليلية وليست توصيات مضمونة',
     );
     expect(screen.queryByLabelText('المستخدمون')).toBeNull(); // admin only
     expect(screen.queryByTestId('desktop-actions')).toBeNull(); // browser: no desktop buttons

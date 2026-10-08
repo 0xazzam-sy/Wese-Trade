@@ -1,13 +1,17 @@
-import type { ISeriesApi, PriceFormat } from 'lightweight-charts';
+import type { ISeriesApi, LineData, PriceFormat, UTCTimestamp } from 'lightweight-charts';
 
 import type { CandleBar } from '@/types/market';
 
 import { type ChartCandle, normalizeHistory, toChartCandle } from './candles';
+import { EMA_PERIODS, EmaTrack } from './ema';
 
 /** Minimal series surface used here (keeps the controller unit-testable). */
 export type CandleSeries = Pick<ISeriesApi<'Candlestick'>, 'setData' | 'update' | 'applyOptions'>;
 
 export type ApplyResult = 'updated' | 'appended' | 'historical' | 'ignored' | 'gap';
+
+/** Minimal line-series surface for the EMA lines. */
+export type LineSeries = Pick<ISeriesApi<'Line'>, 'setData' | 'update' | 'applyOptions'>;
 
 /**
  * Owns the candle data of one chart outside React.
@@ -22,6 +26,10 @@ export class ChartController {
   private times = new Set<number>();
   private lastTime: number | null = null;
   private gen = 0;
+  /** Ordered open times and closes of the loaded bars (EMA input). */
+  private order: number[] = [];
+  private closes: number[] = [];
+  private readonly emas = EMA_PERIODS.map((n) => new EmaTrack(n));
 
   constructor(
     private readonly series: CandleSeries,
@@ -33,7 +41,34 @@ export class ChartController {
      * keeps the PREVIOUS symbol's range (BTC 85,000 → NEAR 5.3 = blank chart).
      */
     private readonly resetView: () => void = () => undefined,
+    /** EMA 20 / 50 / 200 line series (same order as EMA_PERIODS); optional. */
+    private readonly emaLines: readonly LineSeries[] = [],
   ) {}
+
+  private emaData(track: EmaTrack): LineData<UTCTimestamp>[] {
+    return track.points(this.order).map((p) => ({ time: p.time as UTCTimestamp, value: p.value }));
+  }
+
+  private redrawEmas(): void {
+    this.emas.forEach((track, i) => {
+      track.reset(this.closes);
+      this.emaLines[i]?.setData(this.emaData(track));
+    });
+  }
+
+  private pushEmas(time: number, close: number, replace: boolean): void {
+    this.emas.forEach((track, i) => {
+      const value = track.push(close, replace);
+      if (track.visible(track.length - 1)) {
+        this.emaLines[i]?.update({ time: time as UTCTimestamp, value });
+      }
+    });
+  }
+
+  /** Show or hide the EMA lines (overlay toggle). */
+  setEmaVisible(visible: boolean): void {
+    for (const line of this.emaLines) line.applyOptions({ visible });
+  }
 
   /** Generation of the current chart context; stale loads compare against it. */
   get generation(): number {
@@ -61,7 +96,10 @@ export class ChartController {
     this.gen += 1;
     this.times = new Set();
     this.lastTime = null;
+    this.order = [];
+    this.closes = [];
     this.series.setData([]);
+    for (const line of this.emaLines) line.setData([]);
     this.resetView();
     return this.gen;
   }
@@ -74,6 +112,9 @@ export class ChartController {
     this.series.setData(data);
     this.times = new Set(normalized.map((b) => b.time));
     this.lastTime = normalized.length ? (normalized[normalized.length - 1]?.time ?? null) : null;
+    this.order = data.map((c) => c.time);
+    this.closes = data.map((c) => c.close);
+    this.redrawEmas();
     this.fit(normalized.length);
     return normalized.length;
   }
@@ -85,16 +126,26 @@ export class ChartController {
       return 'ignored';
     if (bar.time === this.lastTime) {
       this.series.update(candle);
+      this.closes[this.closes.length - 1] = candle.close;
+      this.pushEmas(bar.time, candle.close, true);
       return 'updated';
     }
     if (bar.time > this.lastTime) {
       this.series.update(candle);
       this.times.add(bar.time);
       this.lastTime = bar.time;
+      this.order.push(bar.time);
+      this.closes.push(candle.close);
+      this.pushEmas(bar.time, candle.close, false);
       return 'appended';
     }
     if (this.times.has(bar.time)) {
       this.series.update(candle, true);
+      const i = this.order.indexOf(bar.time);
+      if (i >= 0) {
+        this.closes[i] = candle.close;
+        this.redrawEmas();
+      }
       return 'historical';
     }
     return 'gap'; // an older candle we never had: caller should resync history

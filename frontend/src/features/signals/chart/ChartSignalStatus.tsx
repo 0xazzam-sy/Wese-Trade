@@ -128,11 +128,9 @@ export function ChartSignalStatus({
               'text-fg-subtle text-2xs min-w-0 truncate',
               signal && 'hidden @5xl:block',
             )}
-            title={`${CHART_SIGNAL_AR.forward} · ${CHART_SIGNAL_AR.unproven} — ${CHART_SIGNAL_AR.disclaimer}`}
+            title={`${CHART_SIGNAL_AR.forward} — ${CHART_SIGNAL_AR.disclaimer}`}
           >
-            {signal
-              ? `${CHART_SIGNAL_AR.unproven} — ${CHART_SIGNAL_AR.disclaimer}`
-              : `${CHART_SIGNAL_AR.enabled} · ${CHART_SIGNAL_AR.forward} · ${CHART_SIGNAL_AR.unproven}`}
+            {signal ? CHART_SIGNAL_AR.disclaimer : CHART_SIGNAL_AR.enabled}
           </span>
         )}
         <ChartLegend />

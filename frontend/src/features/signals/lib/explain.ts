@@ -47,7 +47,7 @@ export interface CategoryRow {
   tone: ExplainTone;
 }
 
-export type Decision = 'BUY' | 'SELL' | 'NEUTRAL' | 'ANALYSIS_ONLY';
+export type Decision = 'BUY' | 'SELL' | 'NEUTRAL';
 
 export interface Explanation {
   decision: Decision;
@@ -73,7 +73,7 @@ export interface Explanation {
 }
 
 export const NO_ENTRY_TEXT = 'لا توجد فرصة دخول مؤكدة حسب شروط الاستراتيجية حالياً.';
-export const ANALYSIS_ONLY_TEXT = 'تحليل فقط — هذا الفريم غير مثبت للإشارات حتى الآن.';
+export const OUT_OF_SCOPE_TEXT = 'هذا الرمز أو الفريم خارج نطاق إشارات Strategy 4.2 حالياً.';
 export const SCORE_LABEL = 'قوة توافق شروط الاستراتيجية';
 export const SCORE_TOOLTIP =
   'هذه الدرجة تقيس مدى توافق شروط الاستراتيجية وليست احتمال نجاح الصفقة.';
@@ -421,7 +421,6 @@ export function explain(
 
   let decision: Decision;
   if (signal) decision = signal.side === 'long' ? 'BUY' : 'SELL';
-  else if (researchOnly) decision = 'ANALYSIS_ONLY';
   else decision = 'NEUTRAL';
 
   const side: SignalSide | null =
@@ -446,7 +445,7 @@ export function explain(
   const blockers: string[] = [];
   if (!signal) {
     if (strategy && !strategy.signal_capable) {
-      blockers.push(strategy.scope_note_ar ?? ANALYSIS_ONLY_TEXT);
+      blockers.push(OUT_OF_SCOPE_TEXT);
     }
     if (display.kind === 'developing') {
       blockers.push('الإعداد على شمعة لم تُغلق بعد — لا إشارة قبل إغلاقها وتأكيدها.');
@@ -472,11 +471,11 @@ export function explain(
     headline = 'إشارة مؤكدة من محرك Wese Trade';
     reason = [FAMILY_AR[signal.family], ...positives.slice(0, 2)].join(' · ');
   } else if (researchOnly) {
-    decisionLabel = 'تحليل فقط';
-    tradeLine = 'لا — الإشارات على 15د و30د و1س فقط';
-    headline = ANALYSIS_ONLY_TEXT;
+    decisionLabel = 'محايد';
+    tradeLine = 'لا';
+    headline = 'لا توجد فرصة تداول مؤكدة حالياً.';
     reason = bias
-      ? `${BIAS_AR[bias]} حسب الاتجاه والهيكل — ليس إشارة تداول.`
+      ? `${BIAS_AR[bias]} حسب الاتجاه والهيكل — لا توجد فرصة مؤكدة.`
       : 'التحليل غير جاهز بعد.';
   } else {
     decisionLabel = 'محايد';

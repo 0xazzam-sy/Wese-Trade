@@ -75,7 +75,7 @@ export function SettingsView() {
             {run ? FORWARD_STATUS_AR[run.status] : 'غير مُثبت — لا يوجد تشغيل'}
           </Row>
           <p className="text-fg-subtle text-2xs mt-1">
-            الإشارات قيد الاختبار وليست توصيات مضمونة. الإعدادات مجمّدة ولا تُعدّل من الواجهة.
+            الإشارات تحليلية وليست توصيات مضمونة. إعدادات الاستراتيجية مجمّدة ولا تُعدّل من الواجهة.
           </p>
         </Section>
         <Section id="market" title="مزود بيانات السوق">

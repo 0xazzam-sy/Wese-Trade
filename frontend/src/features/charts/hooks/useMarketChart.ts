@@ -7,6 +7,7 @@ import { ApiError } from '@/lib/http';
 import { marketsApi } from '@/services/api/markets';
 import { marketFeed } from '@/services/realtime/marketFeed';
 import type { AnalysisSnapshot } from '@/types/analysis';
+import type { ExecutionState } from '@/types/execution';
 import type { SignalView } from '@/types/signal';
 import type { CandleBar, MarketSymbol, StreamState, Timeframe } from '@/types/market';
 
@@ -25,6 +26,8 @@ export interface MarketChartState {
   analysis: AnalysisSnapshot | null;
   /** Signals for exactly this symbol/timeframe (null until the first signal event). */
   signal: SignalView | null;
+  /** Execution timing for exactly this symbol/timeframe (1m/5m/10m; null until received). */
+  execution: ExecutionState | null;
   reload: () => void;
 }
 
@@ -70,6 +73,11 @@ export function useMarketChart(
   const analysis = analysisState?.key === streamKey ? analysisState.value : null;
   const [signalState, setSignalState] = useState<{ key: string; value: SignalView } | null>(null);
   const signal = signalState?.key === streamKey ? signalState.value : null;
+  const [executionState, setExecutionState] = useState<{
+    key: string;
+    value: ExecutionState;
+  } | null>(null);
+  const execution = executionState?.key === streamKey ? executionState.value : null;
 
   useEffect(() => {
     // setData() does not reset series options, so this survives chart resets.
@@ -114,6 +122,10 @@ export function useMarketChart(
       onSignal: (view) => {
         if (!active || view.symbol !== symbol || view.timeframe !== timeframe) return;
         setSignalState({ key: `${symbol}|${timeframe}`, value: view });
+      },
+      onExecution: (state) => {
+        if (!active || state.symbol !== symbol || state.timeframe !== timeframe) return;
+        setExecutionState({ key: `${symbol}|${timeframe}`, value: state });
       },
       onAnalysis: (update) => {
         if (!active) return;
@@ -160,5 +172,5 @@ export function useMarketChart(
     };
   }, [controllerRef, symbol, timeframe, reloadToken, reload]);
 
-  return { load, stream, analysis, signal, reload };
+  return { load, stream, analysis, signal, execution, reload };
 }

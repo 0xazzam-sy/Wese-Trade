@@ -18,6 +18,9 @@ export interface ChartPalette {
   crosshairLabel: string;
   bull: string;
   bear: string;
+  ema20: string;
+  ema50: string;
+  ema200: string;
 }
 
 function cssVar(styles: CSSStyleDeclaration, name: string, fallback: string): string {
@@ -36,6 +39,9 @@ export function readChartPalette(element: Element = document.documentElement): C
     crosshairLabel: cssVar(s, '--ns-chart-crosshair-label', 'black'),
     bull: cssVar(s, '--ns-bull', 'green'),
     bear: cssVar(s, '--ns-bear', 'red'),
+    ema20: cssVar(s, '--ns-warning', '#f5a524'),
+    ema50: cssVar(s, '--ns-accent', '#22d3ee'),
+    ema200: cssVar(s, '--ns-violet', '#a78bfa'),
   };
 }
 

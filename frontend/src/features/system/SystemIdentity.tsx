@@ -72,7 +72,7 @@ export function SystemIdentity() {
         <Row label="بيانات السوق (OKX)" value={market.text} tone={market.tone} />
       </ul>
       <p className="text-fg-subtle text-2xs relative mt-2 leading-5">
-        منصة تحليل فقط — لا يتم تنفيذ أي صفقات.
+        تداول يدوي — المنصة لا تنفذ أي صفقات تلقائياً.
       </p>
     </section>
   );
