@@ -1,0 +1,98 @@
+# Wese Trade — Phase 7: hierarchical fast-trading engine (`wese-trade-fast-7`) — 1m / 5m / 10m
+
+> **Status: PRE-REGISTERED PROTOCOL**, written and committed before any Phase 7 result.
+>
+> - Strategy 4.2 (15m/30m/1h) is unchanged.
+> - No release happens in this phase. v1.0.1 stays production.
+> - The scalp-6 *analysis layer* (EMA, S/R strength, liquidity, structure, regime, direction) is
+>   kept and reused. Its BUY/SELL decision model is rejected (`docs/research-scalp6.md`).
+> - The Phase 5 holdout (2026-07-01 → 2026-10-07) is **still sealed** and stays sealed until a
+>   candidate is frozen.
+
+## 1. Decision hierarchy
+
+`MARKET STATE → DIRECTION → LOCATION → SETUP → TRIGGER → TRADE PLAN`
+
+Nothing below a level is evaluated unless the level above allows it.
+
+1. **Market state:** UPTREND / DOWNTREND / RANGE / COMPRESSION / EXPANSION / TRANSITION.
+   - Inputs: EMA ordering and slope, swing structure, ADX(14), the trailing range width over 60
+     candles in ATR units, the Bollinger-width percentile and the ATR percentile.
+   - Exact rules are in `backend/app/fast7/state.py`, fixed with this file.
+2. **Direction:** BULLISH / BEARISH / NEUTRAL. It reuses the scalp-6 direction blend (EMA,
+   structure, momentum, higher timeframe). HTF disagreement lowers confidence and is never a hard
+   gate.
+3. **Location:**
+   - support / resistance (with strength) and the dynamic EMA zone;
+   - range edges (top / bottom 20% of the trailing range), the breakout level and retest zone;
+   - liquidity pools, and premium / discount of the trailing range.
+   - A BUY needs room: no medium/strong resistance within 1 R above. SELL is the mirror.
+4. **Setup modules**, each active only in its states:
+
+| Module | Active states | Setup (long; short mirrored) | Trigger (one, strongest suitable) |
+| --- | --- | --- | --- |
+| M1 trend pullback | UPTREND | pullback into the EMA mid zone or a medium+ support, within 5 candles | micro-BOS: close > high of the last 3 candles |
+| M2 breakout + retest | COMPRESSION → EXPANSION, UPTREND | decisive close above a medium+ level within the last 20 candles, then price back to within 0.3 ATR of it | retest close back above the level |
+| M3 momentum expansion | COMPRESSION (≤ 10 candles ago) | expansion candle: range ≥ 1.5 ATR, close in the outer 20%, relative volume ≥ 1.5 | that candle's close |
+| M4 liquidity sweep reversal | RANGE, TRANSITION, at a medium+ level or range edge | sweep of a pool or level (wick through, close back) | close back inside + candle direction |
+| M5 range edge reversal | RANGE | price in the bottom 20% of the 60-candle range, at a support | rejection candle (lower wick ≥ 50% of range) |
+| M6 extension mean reversion (new architecture) | any except EXPANSION | close ≥ 3 ATR from the EMA mid (z-extreme) | reversal candle closing back toward the mean |
+| M7 session opening range (new architecture) | any | 30-minute opening range at 07:00 (London) and 13:30 (New York) UTC | first close beyond the opening range |
+| M0 time-series momentum (baseline) | any | sign of the 20-candle return | every 20 candles |
+
+## 2. Stage 1: market-behaviour screen (plan-independent, development data only)
+
+- For every causal module event, on each TF (1m / 5m / 10m) and all 12 symbols, measure the
+  **signed forward return** from the trigger close to the close `h` candles later, for
+  h ∈ {5, 15, 30, 60}.
+- Also measure the 30-candle maximum favourable / adverse excursion.
+- The result is in basis points (bp) of price. Nothing depends on stops or targets.
+- **Cost hurdles (round trip):**
+  - taker = 2 × (0.05% + 0.02%) = **14 bp**;
+  - maker-assisted (maker entry + maker take-profit, taker stop) = **≈ 6 bp** blended.
+    This is an optimistic lower bound; real fills are modelled in Stage 2.
+- **A module × TF passes the screen** only if, at some horizon h:
+  1. the mean signed forward return ≥ **1.5 × the maker-assisted hurdle (9 bp)**;
+  2. the mean is > 0 for ≥ 9 of the 12 symbols (where n ≥ 30);
+  3. the mean is > 0 in **both halves** of the development period;
+  4. n ≥ 300 events.
+- Many module × TF × horizon combinations are scanned. The strict 1.5× bar and the
+  symbol/time consistency requirements limit false discoveries.
+
+## 3. Stage 2: trade-plan simulation (only for modules that pass Stage 1)
+
+- **Plans:** structural stop (setup invalidation + 0.2 ATR); TP1 / TP2 / TP3 from S/R,
+  liquidity, swings, a measured move or an ATR projection (the scalp-6 target engine).
+- **Entries:**
+  - market entry;
+  - **maker-assisted** entry: a resting limit at the setup level, filled only *through* the
+    price, expiring after a fixed number of candles, with no fallback chase. Adverse selection
+    is captured because fills happen when price trades against the order. Missed entries are
+    counted.
+- **Lifecycle:** ACTIVE / TP1 / TP2 / TP3 / STOPPED / EXPIRED / ENTRY MISSED.
+- **Anti-overtrading:** one live signal per symbol and timeframe. A new signal needs a new
+  setup event (new structure, level interaction, breakout or sweep), never a repeat of the same
+  move.
+- **Selection.** A small set of plan variants per surviving module is chosen on development
+  only: entry market/maker × target model structural/projection × break-even after TP1. The
+  rule is the best net E with ≥ 300 trades and a plateau over neighbours.
+
+## 4. Gates for production (unchanged in spirit from Phase 6; fixed now)
+
+| # | Gate | Threshold |
+| --- | --- | --- |
+| G1 | Development | net E ≥ +0.03 R, PF ≥ 1.05, ≥ 300 trades |
+| G2 | Validation | net E > 0, PF ≥ 1.05, ≥ 100 trades |
+| G3 | Holdout | net E > 0 and 90% day-block bootstrap CI lower bound > −0.02 R; ≥ 100 trades |
+| G4 | Holdout PF | ≥ 1.10 |
+| G5 | Walk-forward | positive in ≥ 3 of the available quarterly folds |
+| G6 | Drawdown | holdout max DD ≤ max(20 R, 0.25 R × trades) |
+| G7 | Concentration | holdout E > 0 without the best 2 symbols; ≥ 50% of symbols (n ≥ 10) with E ≥ 0 |
+| G8 | Cost stress | holdout net E > −0.02 R under high costs |
+| G11 | Direction | BUY and SELL each > −0.05 R on holdout |
+| G12 | Integrity | no-lookahead / no-repaint tests pass |
+
+- **Stop rule.** If no module passes Stage 1, or no Stage 2 candidate passes G1, the phase ends
+  with the documented proof that none of these architectures provides a usable edge after
+  realistic costs on 1m/5m/10m.
+- Nothing is released in that case.
