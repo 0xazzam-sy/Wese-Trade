@@ -144,3 +144,62 @@ them would still fall short of the 9 bp bar. This is recorded, not pursued.
 - **Selection:** best development net E with ≥ 300 trades whose neighbours (the other entry and
   the other plan) are both > 0. Then validation (G2), walk-forward (G5), and the sealed holdout
   once (G3–G11).
+
+## 8. Stage 2 results: M8 lead-lag 5m (development only)
+
+| Variant | Trades | Win | Gross | After fees | **Net** | Net (high) | PF | Max DD | /day | Missed | 90% CI (net) | L / S |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| V1 market | 1,545 | 41.9% | +0.073 | −0.126 | **−0.229** | −0.397 | 0.60 | 362 R | 2.9 | 34 | −0.301 … −0.152 | −0.28 / −0.15 |
+| V1 limit (maker) | 1,202 | 42.1% | +0.002 | −0.163 | **−0.231** | −0.372 | 0.62 | 284 R | 2.2 | 400 | −0.315 … −0.142 | −0.29 / −0.15 |
+| V2 market | 1,418 | 38.8% | +0.051 | −0.160 | **−0.276** | −0.468 | 0.61 | 393 R | 2.6 | 164 | −0.348 … −0.198 | −0.31 / −0.23 |
+| V2 limit (maker) | 1,063 | 37.6% | −0.028 | −0.208 | **−0.291** | −0.460 | 0.60 | 313 R | 2.0 | 540 | −0.371 … −0.208 | −0.28 / −0.31 |
+
+Every one of the 11 altcoins is negative under every variant (V1 market: −0.05 … −0.40 R).
+
+**Why.** The +9.5 bp drift is only ≈ +0.07 R gross against a structural stop. Friction at
+BTC-impulse moments is about 0.3 R: these are fast markets, so stop exits pay taker fees plus
+slippage. The **maker-assisted entries show adverse selection** exactly as modelled: the limit
+order fills precisely when the alt does *not* follow BTC, so gross falls from +0.073 to +0.002.
+G1 fails, and validation and the holdout were not read.
+
+## 9. Verdict: stop rule B (several fundamentally different architectures exhausted)
+
+No 1m / 5m / 10m architecture produces a usable edge after realistic manual-execution costs. All
+evidence below is on development data. The **holdout (2026-07-01 → 2026-10-07) has never been
+read by any phase.**
+
+| Phase | Architecture | Information used | Result |
+| --- | --- | --- | --- |
+| 5 | LTF-5.0 HTF-aligned pullback | price / EMA / swings | G1 fail on 1m, 5m, 10m (best −0.064 / −0.071 / −0.077 R) |
+| 5 | LTF-5.1 trend + volatility-expansion | + regime gate | G1 fail (best −0.023 R on 10m; the 1m pocket has n = 58) |
+| 6 | scalp-6 A trend continuation (confluence) | EMA, S/R strength, liquidity, structure, momentum, volume, HTF | G1 fail (best −0.085 R, 10m) |
+| 6 | scalp-6 B momentum breakout | same | G1 fail (best −0.153 R) |
+| 6 | scalp-6 C liquidity sweep reversal | same | G1 fail (best −0.141 R) |
+| 6 | scalp-6 D regime-adaptive | same | G1 fail (best −0.089 R) |
+| 7 | M1 state-gated trend pullback | + market state (ADX, BB width, range) | screen fail: ≤ ±4 bp forward drift |
+| 7 | M2 breakout + retest | same | screen fail |
+| 7 | M3 momentum expansion after compression | same | screen fail |
+| 7 | M4 liquidity sweep at a level / range edge | same | screen fail (best +4.5 bp) |
+| 7 | M5 range edge reversal | same | screen fail (+3.6 bp, 5m) |
+| 7 | M6 extension mean reversion | same | screen fail |
+| 7 | M7 session opening-range breakout | time of day | screen fail (systematically −8 bp) |
+| 7 | M0 time-series momentum | returns | screen fail |
+| 7 | M8 cross-asset lead-lag | **BTC → alt** | screen pass on 5m, **Stage 2 fail** (−0.229 R; CI fully < 0) |
+
+**The plan-independent proof (Stage 1).** For every setup family, on every timeframe and 12
+symbols, the mean signed forward move after the setup is within ±5 bp. The exception is the
++9.5 bp M8 pocket, which fails once executed. The hurdles are 14 bp for a taker round trip and
+≈ 6 bp for an optimistic maker-assisted one. Typical 30-candle excursions are 45–165 bp. No stop
+or target geometry can turn a ±5 bp drift into positive expectancy after these costs.
+
+**What would change the picture** (not available to this app or to manual phone trading):
+- information beyond OHLCV: order-book depth / imbalance, trade-by-trade aggressor flow,
+  liquidation feeds, funding and open-interest dynamics (OKX serves only about 3 months of
+  funding history);
+- sub-second execution and maker-rebate fee tiers, which require API execution;
+- longer horizons. 15m / 30m / 1h are already covered by Strategy 4.2, which is in forward test.
+
+**Consequence.** No lower-timeframe BUY/SELL engine is activated, and no release is made.
+v1.0.1 stays production. The scalp-6 analysis layer (EMA, S/R with strength, liquidity, BOS /
+CHoCH, regime, direction) and the fast-7 market-state engine are kept in the codebase for future
+use.
