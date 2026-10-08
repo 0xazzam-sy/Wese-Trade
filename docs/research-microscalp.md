@@ -146,3 +146,30 @@ the series are warm-up.
   setup below that bar cannot pay costs after manual latency.
 
 Only Stage B passes may proceed to Stage C (trade-plan construction).
+
+## 6. Order-book subset (pre-registered 2026-10-08, before any order-book result)
+
+**Cost and scope.**
+
+- Reducing one day of L2 400-level updates costs ≈ 5 µs per line. That is 33 s for PEPE and
+  several minutes for BTC / ETH.
+- The order-book study therefore uses:
+  - **6 symbols:** BTC, ETH, SOL, XRP, DOGE, PEPE;
+  - **every second day** of the order-book development window (2026-06-10 → 07-31, 26 days).
+
+**Features** (5-second state at the candle close; `app/research/micro/book.py`):
+
+| id | feature |
+| --- | --- |
+| O1 | top-of-book size imbalance |
+| O2 | top-5 imbalance |
+| O3 | notional depth imbalance within 10 bp |
+| O4 | notional depth imbalance within 25 bp |
+| O5 | microprice − mid (bp) |
+| O6 | spread (bp; context only) |
+
+**Stage A gate for this subset.**
+
+- The same IC statistic as §5, with targets measured from the +20 s price.
+- Pass: |t| ≥ 3 pooled, the same sign in ≥ 5 of 6 symbols, and the same sign in both halves
+  (before / after 2026-07-05).
