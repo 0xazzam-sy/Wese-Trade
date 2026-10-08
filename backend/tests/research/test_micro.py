@@ -5,6 +5,7 @@ from __future__ import annotations
 import gzip
 import io
 import json
+import math
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -149,3 +150,64 @@ async def test_backfill_logs_unfilled(tmp_path: Path, monkeypatch: pytest.Monkey
 
 async def _no_sleep(_: float) -> None:
     return None
+
+
+def _synthetic_buckets(n_days: int = 3, seed: int = 5) -> Any:
+    import random
+    from array import array
+
+    from app.research.micro import stage_ab as ab
+
+    rng = random.Random(seed)  # noqa: S311 - deterministic test data
+    n = n_days * tr.PER_DAY
+    price, px = 100.0, array("d")
+    cols: dict[str, Any] = {
+        k: array("d") for k in ("hi", "lo", "buy", "sell", "big_buy", "big_sell")
+    }
+    for _ in range(n):
+        price *= math.exp(rng.gauss(0, 3e-4))
+        px.append(price)
+        cols["hi"].append(price * 1.0001)
+        cols["lo"].append(price * 0.9999)
+        b, s = rng.expovariate(1.0), rng.expovariate(1.0)
+        cols["buy"].append(b)
+        cols["sell"].append(s)
+        cols["big_buy"].append(b if rng.random() < 0.05 else 0.0)
+        cols["big_sell"].append(s if rng.random() < 0.05 else 0.0)
+    return ab.Buckets(0, px, n=array("i", [3] * n), **cols)
+
+
+def test_stage_ab_features_and_setups_are_causal() -> None:
+    """Changing everything after a candle close must not change features or setups at it."""
+    from app.research.micro import stage_ab as ab
+
+    b = _synthetic_buckets()
+    cut = 2 * tr.PER_DAY  # candle boundary
+    full = ab.aggregate(ab.minute_candles(b), 5)
+    fr_full = ab.frame(full, None)
+    for name in ("price", "hi", "lo", "buy", "sell", "big_buy", "big_sell"):
+        arr = getattr(b, name)
+        for k in range(cut, len(arr)):
+            arr[k] = arr[k] * 1.7 + 1.0
+    cut_cd = ab.aggregate(ab.minute_candles(b), 5)
+    fr_cut = ab.frame(cut_cd, None)
+    last = next(j for j, k in enumerate(full.k_end) if k == cut)
+    for feat in ab.FEATURES[:-1]:
+        for j in range(ab.WARMUP, last + 1):
+            x, y = fr_full.feats[feat][j], fr_cut.feats[feat][j]
+            assert (x != x and y != y) or x == pytest.approx(y), (feat, j)
+    for j in range(ab.WARMUP, last + 1):
+        assert ab.setups(full, fr_full, j) == ab.setups(cut_cd, fr_cut, j)
+
+
+def test_forward_return_uses_latency_price() -> None:
+    from array import array
+
+    from app.research.micro import stage_ab as ab
+
+    px = array("d", [float(i + 1) for i in range(100)])
+    zeros = array("d", [0.0] * 100)
+    b = ab.Buckets(0, px, px, px, zeros, zeros, zeros, zeros, array("i", [0] * 100))
+    # close boundary at bucket 12 (1 minute); +20 s = 4 buckets later; 1 minute after that.
+    assert b.px_at(12, 0) == 12.0 and b.px_at(12, 20) == 16.0
+    assert ab.fwd(b, 12, 20, 1) == pytest.approx(math.log(28.0 / 16.0))
