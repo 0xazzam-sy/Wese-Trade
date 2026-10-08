@@ -196,12 +196,17 @@ def _job(args: tuple[str, str]) -> tuple[str, list[dict[str, Any]]]:
     return measure(*args)
 
 
+def _side_mean(sub: list[dict[str, Any]], hz: int, side: int) -> float:
+    vals = [r["fwd"][hz] for r in sub if r["side"] == side]
+    return round(statistics.fmean(vals), 2) if vals else 0.0
+
+
 def screen(tf: str) -> dict[str, Any]:
     t0 = time.time()
     rows: list[dict[str, Any]] = []
     with ProcessPoolExecutor(max_workers=4) as pool:
-        for _sym, r in pool.map(_job, [(s, tf) for s, _ in members()]):
-            rows += r
+        for _sym, chunk in pool.map(_job, [(s, tf) for s, _ in members()]):
+            rows += chunk
     times = sorted(r["t"] for r in rows)
     mid = times[len(times) // 2] if times else 0
     result: dict[str, Any] = {}
@@ -216,8 +221,8 @@ def screen(tf: str) -> dict[str, Any]:
             vals = [r["fwd"][hz] for r in sub]
             mean = statistics.fmean(vals)
             by_sym: dict[str, list[float]] = defaultdict(list)
-            for r in sub:
-                by_sym[r["sym"]].append(r["fwd"][hz])
+            for row in sub:
+                by_sym[row["sym"]].append(row["fwd"][hz])
             pos_sym = sum(1 for v in by_sym.values() if len(v) >= 30 and statistics.fmean(v) > 0)
             elig = sum(1 for v in by_sym.values() if len(v) >= 30)
             h1 = [r["fwd"][hz] for r in sub if r["t"] < mid]
@@ -227,11 +232,15 @@ def screen(tf: str) -> dict[str, Any]:
             se = statistics.pstdev(vals) / len(vals) ** 0.5 if len(vals) > 1 else 0.0
             passed = mean >= SCREEN_BP and pos_sym >= 9 and m1 > 0 and m2 > 0 and len(sub) >= 300
             entry[f"h{hz}"] = {
-                "mean_bp": round(mean, 2), "se_bp": round(se, 2), "pos_symbols": f"{pos_sym}/{elig}",
-                "half1": round(m1, 2), "half2": round(m2, 2), "pass": passed,
-                "long_bp": round(statistics.fmean([r["fwd"][hz] for r in sub if r["side"] == 1] or [0]), 2),
-                "short_bp": round(statistics.fmean([r["fwd"][hz] for r in sub if r["side"] == -1] or [0]), 2),
-            }  # fmt: skip
+                "mean_bp": round(mean, 2),
+                "se_bp": round(se, 2),
+                "pos_symbols": f"{pos_sym}/{elig}",
+                "half1": round(m1, 2),
+                "half2": round(m2, 2),
+                "pass": passed,
+                "long_bp": _side_mean(sub, hz, 1),
+                "short_bp": _side_mean(sub, hz, -1),
+            }
             if mean > best:
                 best_h, best = hz, mean
         entry["mfe_bp"] = round(statistics.fmean(r["mfe"] for r in sub), 1)
@@ -242,8 +251,10 @@ def screen(tf: str) -> dict[str, Any]:
     out = {"tf": tf, "events": len(rows), "seconds": round(time.time() - t0, 1), "modules": result}
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / f"fast7_{tf}_screen.json").write_text(json.dumps(out, indent=1))
-    print(f"== fast7 screen {tf}: {len(rows)} events ({out['seconds']}s); hurdles taker "
-          f"{HURDLE_TAKER_BP} bp, maker {HURDLE_MAKER_BP} bp, screen bar {SCREEN_BP} bp")  # fmt: skip
+    print(
+        f"== fast7 screen {tf}: {len(rows)} events ({out['seconds']}s); hurdles taker "
+        f"{HURDLE_TAKER_BP} bp, maker {HURDLE_MAKER_BP} bp, screen bar {SCREEN_BP} bp"
+    )
     for mod, e in result.items():
         if not e.get("n"):
             print(f"  {mod}: no events")
@@ -251,8 +262,10 @@ def screen(tf: str) -> dict[str, Any]:
         cols = "  ".join(
             f"h{hz}={e[f'h{hz}']['mean_bp']:+6.2f}({e[f'h{hz}']['pos_symbols']})" for hz in HORIZONS
         )
-        print(f"  {mod}: n={e['n']:6} long={e['long']:6} {cols} mfe={e['mfe_bp']} mae={e['mae_bp']} "
-              f"PASS={e['pass']}")  # fmt: skip
+        print(
+            f"  {mod}: n={e['n']:6} long={e['long']:6} {cols} "
+            f"mfe={e['mfe_bp']} mae={e['mae_bp']} PASS={e['pass']}"
+        )
     return out
 
 

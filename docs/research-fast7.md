@@ -96,3 +96,20 @@ Nothing below a level is evaluated unless the level above allows it.
   with the documented proof that none of these architectures provides a usable edge after
   realistic costs on 1m/5m/10m.
 - Nothing is released in that case.
+
+---
+
+## 5. Addendum (pre-registered before it was run): M8 cross-asset lead-lag
+
+Every module above uses single-symbol price/volume information. M8 uses different information.
+
+- **Event.** On a closed candle, BTC's candle return ≥ 2 × BTC ATR in the direction `d`, while
+  the altcoin's same-candle return is < 0.5 × its own ATR in that direction (the alt is
+  lagging).
+- **Signal.** Trade the alt in direction `d`.
+- **Scope.** 11 altcoins (BTC excluded); 1m and 5m; horizons h ∈ {1, 3, 5, 15} candles.
+- **Screen.** Same bar as §2: mean ≥ 9 bp, ≥ 9 of 11 symbols positive, both halves positive,
+  n ≥ 300.
+- **Practicality note.** Lead-lag on crypto is typically arbitraged within seconds. Even a
+  positive 1m result would be hard to execute manually from a phone; this is reported either
+  way.
