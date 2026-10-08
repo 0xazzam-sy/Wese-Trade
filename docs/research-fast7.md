@@ -113,3 +113,34 @@ Every module above uses single-symbol price/volume information. M8 uses differen
 - **Practicality note.** Lead-lag on crypto is typically arbitraged within seconds. Even a
   positive 1m result would be hard to execute manually from a phone; this is reported either
   way.
+
+## 6. Stage 1 results (development data only; commit of this section)
+
+| TF | M0 | M1 | M2 | M3 | M4 | M5 | M6 | M7 | M8 (lead-lag) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1m | fail | fail | fail | fail | fail | fail | fail | fail | fail (best +0.6 bp) |
+| 5m | fail | fail | fail | fail | fail | fail | fail | fail | **PASS** at h = 5 (+9.51 bp, 9/11 symbols, halves +6.85 / +12.15, n = 1,653) |
+| 10m | fail | fail | fail | fail | fail | fail | fail | fail | not run (5m-native study) |
+
+**M1–M7 and M0.** All within about ±5 bp at every horizon on every timeframe (best +4.5 bp,
+M4 10m h30), while typical 30-candle excursions are 45 bp (1m), 115 bp (5m) and 165 bp (10m).
+
+**Exploratory observation, not pre-registered.** Session opening-range breakouts (M7)
+fail consistently: −8 bp, with only 1 of 12 symbols positive, on 5m h60 and 10m h30. Fading
+them would still fall short of the 9 bp bar. This is recorded, not pursued.
+
+## 7. Stage 2 pre-registration for M8 (5m), written before simulation
+
+- **Plans** (2 × 2 = 4 variants):
+  - **V1:** stop = entry ∓ 1.5 ATR(alt); TP1 / TP2 / TP3 = 1 R / 2 R / 3 R (ATR projection);
+    time stop 5 candles (the measured horizon).
+  - **V2:** structural stop = the extreme of the last 3 alt candles ∓ 0.2 ATR (minimum
+    0.5 ATR); TP1 / TP2 / TP3 = 1 R / 2 R / 3 R; time stop 15 candles.
+  - **Entry:** market at the trigger close (taker) · **maker limit** at close ∓ 0.25 ATR (fills
+    only *through* the price, expires after 3 candles, cancelled if TP1 or the stop trades
+    first). This captures adverse selection; missed entries count as no trade.
+- **Costs:** base for decisions, high for stress (§3 of Phase 6).
+- **Overlap:** one position per alt at a time.
+- **Selection:** best development net E with ≥ 300 trades whose neighbours (the other entry and
+  the other plan) are both > 0. Then validation (G2), walk-forward (G5), and the sealed holdout
+  once (G3–G11).
