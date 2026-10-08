@@ -76,3 +76,73 @@ exist only once the prospective collector has gathered them.
   maker fee and fill only through the price.
 - **Signal validity.** `valid_until` = the signal close + 1 candle (1m / 5m) or + ½ candle
   (10m). A plan whose entry was not possible within that window is `ENTRY MISSED`.
+
+## 5. Stage A / B definitions (pre-registered 2026-10-08, before any Stage A/B result)
+
+**Inputs.**
+
+- Only the 5-second trade-flow buckets from the exchange trade archive (§2).
+- Candles for 1m / 5m / 10m are built from the same buckets:
+  - open = previous close; high / low / close = bucket extremes and last price;
+  - volume = buy + sell notional.
+- Market context comes from the Phase 7 `StateTracker`:
+  - EMA 20 / 50 / 200;
+  - ATR(14) and the ATR percentile;
+  - structure input fixed at neutral (0).
+- Volumes are in contract units × price. The per-symbol contract size is a constant scale, and
+  every feature below is a ratio or a z-score, so the scale cancels.
+
+**Decision points.** Every closed candle of the timeframe, per symbol. The first 300 candles of
+the series are warm-up.
+
+**Stage A features** (all causal; computed at the candle close `t`):
+
+| id | feature | definition |
+| --- | --- | --- |
+| A1 | flow imbalance, 1 candle | (buy − sell) / (buy + sell) over the last candle |
+| A2 | flow imbalance, 3 candles | same over the last 3 candles |
+| A3 | net-flow z-score | net flow of the last candle ÷ the rolling std of per-candle net flow (last 288 candles) |
+| A4 | large-trade imbalance | (big_buy − big_sell) / (buy + sell), last candle (big = ≥ previous day's p99 size) |
+| A5 | absorption | A3 − (candle return ÷ rolling std of candle returns, 288): flow that price did not follow |
+| A6 | flow acceleration | imbalance of the last 30 s − A1 |
+| A7 | signed intensity | (trade count of the last candle ÷ its 288-candle mean) × sign(candle return) |
+| A8 | BTC flow lead | A3 of BTCUSDT at the same close (alts only) |
+
+**Targets.**
+
+- Signed forward log-return over H = 1, 5, 10 and 30 minutes.
+- The entry reference is the last price at **t + 20 s** (the manual-latency model).
+- The latency-0 version is reported for decay.
+
+**IC statistic.**
+
+- Spearman rank correlation per symbol per UTC day.
+- Overlapping horizons are thinned to non-overlapping samples (every max(H, TF)).
+- The pooled t-statistic is mean(daily IC) / sd × √(symbol-days).
+- Gate (§4): |t| ≥ 3 pooled, the same sign in ≥ 9 of 12 symbols, and the same sign in both
+  development halves (before / after 2026-01-01).
+
+**Stage B setups** (direction d = ±1; all evaluated on every timeframe):
+
+| id | setup | condition at the candle close |
+| --- | --- | --- |
+| B-A | trend continuation | state UPTREND (DOWNTREND for d = −1); the candle's low (high) touched EMA20 ± 0.3 ATR; A3 ≥ +1.5 in d |
+| B-B | breakout with aggression | close beyond the previous 20-candle high (low) by > 0.1 ATR; A3 ≥ 2 in d; A4 in d |
+| B-C | liquidity sweep reversal | low (high) below (above) the previous 20-candle extreme; close back inside the extreme; A3 ≤ −1.5 against d (sellers absorbed at the low); close in the upper (lower) half of the candle |
+| B-D | range-edge rejection | state RANGE; location in range ≤ 0.2 (≥ 0.8); A3 ≥ +1 in d |
+| B-E | momentum impulse | the candle's \|return\| ≥ 1.5 ATR in d; A3 ≥ 2 in d; A7 ≥ 2 |
+
+**Stage B statistic.**
+
+- Mean signed forward return in bp, measured from the t + 20 s price, at H = 1 / 5 / 10 / 30 min.
+- One event per symbol per setup and direction within H (no overlap).
+- Also reported:
+  - decay at +0 / +5 / +10 / +20 / +30 s;
+  - per-symbol sign;
+  - the two development halves;
+  - n.
+- Gate (§4): ≥ 9 bp at one H, ≥ 9 of 12 symbols positive, both halves positive, n ≥ 300.
+- 9 bp is roughly the round-trip taker + slippage hurdle (≈ 14 bp) minus a maker-entry saving. A
+  setup below that bar cannot pay costs after manual latency.
+
+Only Stage B passes may proceed to Stage C (trade-plan construction).
