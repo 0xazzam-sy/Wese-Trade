@@ -49,7 +49,7 @@ function Row({
   return (
     <div className="flex min-w-0 items-baseline gap-1.5" data-testid={testId}>
       <dt className="text-fg-subtle shrink-0">{label}</dt>
-      <dd className={cn('truncate font-semibold', tone ?? 'text-fg')} title={value}>
+      <dd dir="auto" className={cn('truncate font-semibold', tone ?? 'text-fg')} title={value}>
         {value}
       </dd>
     </div>
@@ -77,7 +77,15 @@ function PlanCell({
         {label}
         <span className="ns-ltr text-fg-subtle/70 hidden @5xl:inline">{abbr}</span>
       </span>
-      <span className={cn('ns-num truncate text-sm font-medium', tone ?? 'text-fg')}>{value}</span>
+      <span
+        className={cn(
+          'ns-num truncate font-medium',
+          abbr === 'R:R' ? 'text-2xs @5xl:text-xs' : 'text-xs @5xl:text-sm',
+          tone ?? 'text-fg',
+        )}
+      >
+        {value}
+      </span>
     </div>
   );
 }
@@ -112,17 +120,16 @@ export function ExecutionPanel({
   const score = ev && parent ? Math.round(ev.score) : null;
   const regime = snapshot?.analysis_ready ? snapshot.regime?.primary : undefined;
   const ema = execution?.overlay?.ema;
-  const micro = execution?.micro ?? null;
-  const supports = execution?.overlay?.levels.filter((l) => l.kind === 'support').slice(0, 2) ?? [];
-  const resistances =
-    execution?.overlay?.levels.filter((l) => l.kind === 'resistance').slice(0, 2) ?? [];
+  const micro = execution?.micro ?? ev?.micro ?? null;
+  const support = execution?.overlay?.levels.find((l) => l.kind === 'support');
+  const resistance = execution?.overlay?.levels.find((l) => l.kind === 'resistance');
 
   return (
     <section
       aria-label="لوحة توقيت الدخول"
       data-testid="execution-panel"
       data-decision={decision}
-      className="ns-panel @container relative shrink-0 p-3"
+      className="ns-panel @container relative min-h-[275px] shrink-0 p-3 2xl:min-h-[345px]"
     >
       <header className="mb-2 flex items-center gap-2">
         <h2 className="text-sm font-semibold">{EXECUTION_AR.timing}</h2>
@@ -136,6 +143,11 @@ export function ExecutionPanel({
         <span className="text-fg-subtle text-2xs">
           {EXECUTION_AR.roleTitle[context.timeframe] ?? ''}
         </span>
+        {parent && (
+          <span className="text-fg-subtle text-2xs ns-ltr" data-testid="strategy-fingerprint">
+            Strategy {parent.fingerprint}
+          </span>
+        )}
         {!execution && (
           <span role="status" className="text-fg-subtle text-2xs">
             {EXECUTION_AR.waiting}
@@ -270,7 +282,7 @@ export function ExecutionPanel({
                 className="text-fg-muted text-2xs mt-0.5 flex flex-col gap-0.5"
                 data-testid="execution-reasons"
               >
-                {(ev?.reasons ?? []).slice(0, 7).map((r) => (
+                {(ev?.reasons ?? []).slice(0, 4).map((r) => (
                   <li key={r} className="flex min-w-0 items-baseline gap-1.5" title={r}>
                     <span aria-hidden className="bg-accent size-1 shrink-0 rounded-full" />
                     <span className="truncate">{r}</span>
@@ -284,7 +296,7 @@ export function ExecutionPanel({
                 className="text-fg-muted text-2xs mt-0.5 flex flex-col gap-0.5"
                 data-testid="execution-cautions"
               >
-                {(ev?.cautions ?? []).slice(0, 5).map((r) => (
+                {(ev?.cautions ?? []).slice(0, 4).map((r) => (
                   <li key={r} className="flex min-w-0 items-baseline gap-1.5" title={r}>
                     <span aria-hidden className="bg-warning/80 size-1 shrink-0 rounded-full" />
                     <span className="truncate">{r}</span>
@@ -309,34 +321,22 @@ export function ExecutionPanel({
               }
             />
             <Row
-              label="أقرب دعم"
-              value={
-                supports.length
-                  ? supports.map((l) => `${p(l.price)} (${l.strength.toFixed(1)})`).join('، ')
-                  : '--'
-              }
-              tone="text-bull"
-            />
-            <Row
-              label="أقرب مقاومة"
-              value={
-                resistances.length
-                  ? resistances.map((l) => `${p(l.price)} (${l.strength.toFixed(1)})`).join('، ')
-                  : '--'
-              }
-              tone="text-bear"
+              label="دعم / مقاومة"
+              value={`${support ? `${p(support.price)} (${support.strength.toFixed(1)})` : '--'} / ${
+                resistance ? `${p(resistance.price)} (${resistance.strength.toFixed(1)})` : '--'
+              }`}
             />
             <Row
               label="بيانات لحظية"
               value={
-                micro ? (MICRO_AR[micro.status] ?? micro.status) : (MICRO_AR.unavailable ?? '')
+                micro
+                  ? `${MICRO_AR[micro.status] ?? micro.status}${
+                      micro.spread_bp !== null ? ` · ${micro.spread_bp.toFixed(1)}bp` : ''
+                    }`
+                  : (MICRO_AR.unavailable ?? '')
               }
               testId="execution-micro"
             />
-            {micro?.spread_bp !== null && micro?.spread_bp !== undefined && (
-              <Row label="الفارق السعري" value={`${micro.spread_bp.toFixed(2)} bp`} />
-            )}
-            {parent && <Row label="مرجع الاستراتيجية" value={`Strategy ${parent.fingerprint}`} />}
           </dl>
         </div>
       </div>

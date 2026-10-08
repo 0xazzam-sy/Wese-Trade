@@ -249,7 +249,7 @@ export function SignalPanel() {
       data-signal-kind={display.kind}
       data-signal-class={display.signalClass}
       data-decision={x.decision}
-      className="ns-panel @container relative shrink-0 p-3"
+      className="ns-panel @container relative min-h-[275px] shrink-0 p-3 2xl:min-h-[345px]"
     >
       {detailsOpen && (
         <SignalDetails

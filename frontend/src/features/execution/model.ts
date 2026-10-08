@@ -93,10 +93,10 @@ export const FAMILY_AR: Record<string, string> = {
 };
 
 export const MICRO_AR: Record<string, string> = {
-  ok: 'بيانات السوق اللحظية سليمة',
-  degraded: 'بيانات السوق اللحظية متذبذبة',
-  stale: 'بيانات السوق اللحظية متأخرة',
-  unavailable: 'بيانات السوق اللحظية غير متاحة — تحليل الشموع والهيكل فقط',
+  ok: 'سليمة',
+  degraded: 'متذبذبة',
+  stale: 'متأخرة',
+  unavailable: 'غير متاحة',
 };
 
 export const REGIME_AR: Record<string, string> = {

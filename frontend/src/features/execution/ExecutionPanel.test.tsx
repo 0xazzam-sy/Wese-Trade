@@ -60,7 +60,8 @@ describe('ExecutionPanel (1m / 5m / 10m entry timing)', () => {
     for (const [k, v] of plan)
       expect(panel().querySelector(`[data-plan="${k}"]`)).toHaveTextContent(v);
     expect(screen.getByTestId('execution-reasons')).toHaveTextContent('اتجاه 15m صاعد');
-    expect(screen.getByTestId('execution-technical')).toHaveTextContent('Strategy 4.2-a03e20f');
+    expect(screen.getByTestId('strategy-fingerprint')).toHaveTextContent('Strategy 4.2-a03e20f');
+    expect(screen.getByTestId('execution-micro')).toHaveTextContent('سليمة');
   });
 
   it('WAIT: parent context plan shown as preview, timing not ready, missing evidence listed', () => {
@@ -88,7 +89,7 @@ describe('ExecutionPanel (1m / 5m / 10m entry timing)', () => {
     expect(screen.getByTestId('signal-badge')).toHaveTextContent('لا توجد فرصة حالية');
     expect(screen.getByTestId('no-setup')).toHaveTextContent('لا توجد فرصة تداول مؤكدة حالياً.');
     expect(screen.queryByTestId('trade-plan')).toBeNull();
-    expect(screen.getByTestId('execution-technical')).toHaveTextContent('أقرب دعم');
+    expect(screen.getByTestId('execution-technical')).toHaveTextContent('دعم / مقاومة');
   });
 
   it('score is a timing strength, never a win probability; no research wording', () => {

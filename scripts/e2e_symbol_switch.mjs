@@ -102,7 +102,8 @@ async function chartTruth(id) {
 }
 
 async function settle(id, symbol, timeframe) {
-  await page.waitForFunction(
+  await page
+    .waitForFunction(
     ([chartId, sym, tf]) => {
       const s = document.querySelector(`section[data-chart="${chartId}"]`);
       return (
@@ -113,7 +114,13 @@ async function settle(id, symbol, timeframe) {
     },
     [id, symbol, timeframe],
     { timeout: 90_000 },
-  );
+    )
+    .catch(async (error) => {
+      // Say what the chart really shows before failing (diagnostics only).
+      console.log(`settle(${id}, ${symbol}, ${timeframe}) timed out:`, JSON.stringify(await chartTruth(id)));
+      await page.screenshot({ path: path.join(OUT, `timeout-${id}.png`) });
+      throw error;
+    });
   await page.waitForTimeout(1600); // diagnostics refresh every 500 ms
   return chartTruth(id);
 }
