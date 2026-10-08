@@ -5,7 +5,8 @@ JSON lines `{"action": "snapshot"|"update", "ts", "asks": [[px, sz, n], ...], "b
 Size 0 deletes a level. Each snapshot resets the book. Nothing is reconstructed from candles.
 
 Per 5 s bucket (state at the bucket's end boundary; NaN while the book is empty or crossed):
-    spread_bp, imb1 (top-of-book size imbalance), imb5 (top 5 levels), dimb10 / dimb25 (notional
+    mid, spread_bp, imb1 (top-of-book size imbalance), imb5 (top 5 levels),
+    dimb10 / dimb25 (notional
     depth imbalance within 10 / 25 bp of mid), micro_bp (microprice - mid), depth25 (bid + ask
     notional within 25 bp, contract units x price)
 
@@ -35,7 +36,7 @@ URL = (
     "https://www.okx.com/cdn/okx/match/orderbook/pro/L2/400lv/daily/{d}/"
     "{inst}-L2orderbook-400lv-{iso}.tar.gz"
 )
-FIELDS = ("spread_bp", "imb1", "imb5", "dimb10", "dimb25", "micro_bp", "depth25")
+FIELDS = ("mid", "spread_bp", "imb1", "imb5", "dimb10", "dimb25", "micro_bp", "depth25")
 NAN = math.nan
 # Order-book splits (docs §3): the archive window starts 2026-06-10.
 BOOK_DEV = (date(2026, 6, 10), date(2026, 7, 31))
@@ -88,6 +89,7 @@ def _features(bids: dict[float, float], asks: dict[float, float]) -> tuple[float
         return (x - y) / (x + y) if x + y > 0 else 0.0
 
     return (
+        mid,
         (ba - bb) / mid * 1e4,
         imb(bs1, as1),
         imb(b5, a5),
