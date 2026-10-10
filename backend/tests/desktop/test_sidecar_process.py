@@ -108,7 +108,8 @@ def test_start_health_setup_shutdown_and_persistence(sidecar: Sidecar, root: Pat
         assert made.status_code == 201
         runtime = http.get("/api/v1/system/runtime").json()
         assert runtime["mode"] == "desktop"
-        assert runtime["strategy"]["version"] == "wese-trade-forward-4.2-a03e20f1d4"
+        assert runtime["strategy"]["version"].startswith("wese-trade-strategy-4.3-")
+        assert runtime["baseline"]["version"] == "wese-trade-forward-4.2-a03e20f1d4"
         assert runtime["paths"]["data"] == str((root / "data").resolve())
         status = http.get("/api/v1/forward-test/status").json()
         first_run = status["run"]

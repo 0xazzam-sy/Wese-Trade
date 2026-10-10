@@ -51,12 +51,12 @@ describe('ChartSignalStatus («شو موقف النظام هلق؟»)', () => {
     const status = screen.getByTestId('chart-signal-status');
     expect(status).toHaveAttribute('data-state', 'neutral');
     expect(screen.getByTestId('chart-signal-chip')).toHaveTextContent(/^محايد$/);
-    expect(status).toHaveTextContent('لا توجد فرصة دخول مؤكدة حسب الاستراتيجية حالياً');
-    expect(screen.getByTestId('chart-signal-scope')).toHaveTextContent('Strategy 4.2');
+    expect(status).toHaveTextContent('لا توجد فرصة مناسبة على هذا الفريم حالياً');
+    expect(screen.getByTestId('chart-signal-scope')).toHaveTextContent('Strategy 4.3');
   });
 
   it.each(['1m', '5m', '10m'])(
-    '%s: never a Strategy 4.2 signal (execution layer instead)',
+    '%s: never a Strategy 4.3 signal (execution layer instead)',
     (tf) => {
       render(<ChartSignalStatus timeframe={tf} open={null} strategy={FORWARD_STRATEGY} />);
       const status = screen.getByTestId('chart-signal-status');
@@ -96,10 +96,9 @@ describe('SignalMarkerCard (marker tooltip)', () => {
     ])
       expect(text).toContain(label);
     expect(text).toContain('شراء BUY');
-    expect(text).toContain('Strategy 4.2');
+    expect(text).toContain('Strategy 4.3');
     expect(text).toContain('ETHUSDT');
     expect(text).toContain('81/100 · غير معايرة');
-    expect(text).toContain('Trend Continuation');
     expect(text).toContain('2,485.14');
     expect(text).toContain('2,467.73');
     expect(text).toContain('2,558.56');

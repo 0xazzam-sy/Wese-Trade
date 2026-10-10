@@ -13,7 +13,9 @@ import { type Theme, useThemeStore } from '@/stores/themeStore';
 import { DesktopSection } from './DesktopSection';
 import { Row, Section } from './Section';
 import { ROLE_AR } from './roles';
+import { TelegramSection } from './TelegramSection';
 import { UsersSection } from './UsersSection';
+import { EngineStatusCard } from '@/features/strategy43/EngineStatusCard';
 import { WeatherSection } from './WeatherSection';
 
 const THEMES = [
@@ -71,13 +73,16 @@ export function SettingsView() {
           <Row label="الإصدار">
             <span className="ns-ltr text-2xs">{runtime.data?.strategy.version ?? '--'}</span>
           </Row>
-          <Row label="الاختبار المباشر">
-            {run ? FORWARD_STATUS_AR[run.status] : 'غير مُثبت — لا يوجد تشغيل'}
+          <Row label="المرجع المجمّد (Strategy 4.2)">
+            <span className="ns-ltr">{runtime.data?.baseline?.fingerprint ?? '--'}</span>
+            {' · '}
+            {run ? FORWARD_STATUS_AR[run.status] : 'لا يوجد تشغيل'}
           </Row>
           <p className="text-fg-subtle text-2xs mt-1">
             الإشارات تحليلية وليست توصيات مضمونة. إعدادات الاستراتيجية مجمّدة ولا تُعدّل من الواجهة.
           </p>
         </Section>
+        <EngineStatusCard detailed />
         <Section id="market" title="مزود بيانات السوق">
           <Row label="المزود">
             {runtime.data?.market_provider ?? 'OKX'} (بيانات عامة فقط، بدون مفاتيح)
@@ -88,6 +93,7 @@ export function SettingsView() {
       <div className="flex flex-col gap-3">
         <DesktopSection runtime={runtime.data} />
         <WeatherSection enabled={runtime.data?.weather_enabled ?? true} />
+        {user?.role === 'admin' && <TelegramSection />}
         {user?.role === 'admin' && <UsersSection />}
       </div>
     </div>

@@ -135,7 +135,7 @@ describe('SignalPanel (analysis)', () => {
     expect(panel()).toHaveAttribute('data-decision', 'NEUTRAL');
     expect(screen.getByTestId('signal-badge')).toHaveTextContent('محايد');
     expect(screen.getByTestId('decision-headline')).toHaveTextContent(
-      'لا توجد فرصة دخول مؤكدة حسب شروط الاستراتيجية حالياً.',
+      'لا توجد فرصة مناسبة على هذا الفريم حالياً',
     );
     expect(screen.getByTestId('decision-trade')).toHaveTextContent(/^هل في صفقة؟لا$/);
     expect(screen.queryByTestId('trade-plan')).toBeNull();
@@ -143,7 +143,8 @@ describe('SignalPanel (analysis)', () => {
       expect(panel().querySelector(`[data-plan="${abbr}"]`)).toBeNull();
     }
     const blockers = screen.getByTestId('entry-blockers');
-    expect(blockers).toHaveTextContent('ما الذي يمنع الدخول حالياً؟');
+    expect(blockers).toHaveTextContent('لا توجد فرصة مناسبة على هذا الفريم حالياً');
+    expect(screen.getByTestId('best-opportunity')).toHaveAttribute('data-empty', 'true');
     expect(blockers).toHaveTextContent('لا يوجد محفّز هيكلي على الشمعة الأخيرة');
     expect(screen.getByTestId('signal-state')).toHaveTextContent('لا يوجد محفّز هيكلي');
     expect(screen.getByTestId('signal-score')).toHaveTextContent('--');
@@ -273,12 +274,12 @@ describe('SignalPanel (analysis)', () => {
   it('score wording: strategy-conditions strength, never a success probability', () => {
     render(<SignalPanel />);
     setBoth(snap15(), view({ strategy: FORWARD_STRATEGY, active: signal() }));
-    expect(screen.getByTestId('strategy-score')).toHaveTextContent('قوة توافق شروط الاستراتيجية');
+    expect(screen.getByTestId('strategy-score')).toHaveTextContent('قوة الإشارة');
     expect(screen.getByTestId('strategy-score')).toHaveAttribute(
       'title',
-      'هذه الدرجة تقيس مدى توافق شروط الاستراتيجية وليست احتمال نجاح الصفقة.',
+      'قوة الإشارة تقيس توافق أدلة السوق من 100 وليست احتمال نجاح الصفقة.',
     );
-    expect(screen.getByRole('meter', { name: 'قوة توافق شروط الاستراتيجية' })).toHaveAttribute(
+    expect(screen.getByRole('meter', { name: 'قوة الإشارة' })).toHaveAttribute(
       'aria-valuenow',
       '78',
     );
@@ -287,7 +288,7 @@ describe('SignalPanel (analysis)', () => {
       expect(text).not.toContain(word);
     }
     expect(text).not.toMatch(/\d\s*%\s*(نجاح|ربح)/);
-    expect(screen.getByTestId('strategy-fingerprint')).toHaveTextContent('4.2-a03e20f');
+    expect(screen.getByTestId('strategy-fingerprint')).toHaveTextContent('4.3-6044cea');
     expect(panel()).toHaveTextContent('ليست ضماناً للربح');
   });
 
@@ -303,15 +304,72 @@ describe('SignalPanel (analysis)', () => {
     expect(drawer).toHaveTextContent('78/100');
   });
 
-  it('production wording: Strategy 4.2 reference, no research/experimental labels', () => {
+  it('production wording: Strategy 4.3 reference, no research/experimental labels', () => {
     render(<SignalPanel />);
     setBoth(snap15(), view({ active: signal() }));
     const badge = screen.getByTestId('strategy-status');
-    expect(badge).toHaveTextContent('Strategy 4.2');
+    expect(badge).toHaveTextContent('Strategy 4.3');
     const text = panel().textContent;
     for (const w of ['تجريبي', 'غير مُثبت', 'تحليل فقط', 'اختبار مباشر'])
       expect(text).not.toContain(w);
     expect(panel()).toHaveTextContent('ليست ضماناً للربح');
+  });
+
+  it('Strategy 4.3: shows «جودة الفرصة» tier and «قوة الإشارة» out of 100', () => {
+    render(<SignalPanel />);
+    setBoth(
+      snap15(),
+      view({
+        strategy: FORWARD_STRATEGY,
+        active: signal({ score: 72, tier: 'B', tier_ar: 'جيدة' }),
+      }),
+    );
+    expect(screen.getByTestId('signal-tier')).toHaveTextContent('جودة الفرصة:B — جيدة');
+    expect(screen.getByTestId('signal-score')).toHaveTextContent('72');
+    expect(screen.getByTestId('trade-plan')).toBeInTheDocument();
+  });
+
+  it('no trade on this timeframe: shows the best opportunity of the symbol and opens it', () => {
+    render(<SignalPanel />);
+    setBoth(
+      snap15(),
+      view({
+        strategy: FORWARD_STRATEGY,
+        evaluation: evaluation(),
+        best: {
+          id: 'BTCUSDT-1h-x',
+          symbol: 'BTCUSDT',
+          timeframe: '1h',
+          side: 'BUY',
+          tier: 'A',
+          tier_ar: 'قوية',
+          score: 78,
+          family: 'TREND_CONTINUATION',
+          family_ar: 'استمرار الاتجاه',
+          state: 'confirmed',
+          state_ar: 'بانتظار الدخول',
+          entry: 1,
+          stop: 0.9,
+          targets: [1.1, 1.2, 1.3],
+          rr: [1, 2, 3],
+          confirmed_time: 1,
+          valid_until: 2,
+          regime: 'UPTREND',
+          regime_ar: 'اتجاه صاعد',
+        },
+      }),
+    );
+    expect(screen.getByTestId('no-trade-line')).toHaveTextContent(
+      'لا توجد فرصة مناسبة على هذا الفريم حالياً',
+    );
+    const best = screen.getByTestId('best-opportunity');
+    expect(best).toHaveTextContent('أفضل فرصة لهذه العملة:');
+    expect(best).toHaveTextContent('BUY — شراء');
+    expect(best).toHaveTextContent('1h');
+    act(() => {
+      best.click();
+    });
+    expect(useChartStore.getState().charts.primary.timeframe).toBe('1h');
   });
 
   it('switches between the primary and secondary chart analysis', () => {

@@ -1,5 +1,6 @@
 import { ALIGNMENT_AR, DIRECTION_AR, VOLATILITY_AR, ZONE_AR } from '@/features/analysis/lib/labels';
 import type { AnalysisSnapshot, Direction3, StructureState } from '@/types/analysis';
+import type { Tier } from '@/types/strategy43';
 import type {
   ComponentDTO,
   PenaltyDTO,
@@ -64,6 +65,9 @@ export interface Explanation {
   biasLabel: string | null;
   /** Strategy-conditions strength, 0-100. NOT a probability. */
   score: number | null;
+  /** «جودة الفرصة» of a confirmed Strategy 4.3 signal, e.g. «B — جيدة». */
+  tierLabel: string | null;
+  tier: Tier | null;
   /** Score belongs to a candidate that did NOT become a signal. */
   candidateScore: boolean;
   blockers: string[];
@@ -72,11 +76,10 @@ export interface Explanation {
   display: SignalDisplay;
 }
 
-export const NO_ENTRY_TEXT = 'لا توجد فرصة دخول مؤكدة حسب شروط الاستراتيجية حالياً.';
-export const OUT_OF_SCOPE_TEXT = 'هذا الرمز أو الفريم خارج نطاق إشارات Strategy 4.2 حالياً.';
-export const SCORE_LABEL = 'قوة توافق شروط الاستراتيجية';
-export const SCORE_TOOLTIP =
-  'هذه الدرجة تقيس مدى توافق شروط الاستراتيجية وليست احتمال نجاح الصفقة.';
+export const NO_ENTRY_TEXT = 'لا توجد فرصة مناسبة على هذا الفريم حالياً';
+export const OUT_OF_SCOPE_TEXT = 'الفرص الأساسية تصدر على 15m و30m و1h — هذا الفريم لتوقيت الدخول.';
+export const SCORE_LABEL = 'قوة الإشارة';
+export const SCORE_TOOLTIP = 'قوة الإشارة تقيس توافق أدلة السوق من 100 وليست احتمال نجاح الصفقة.';
 
 const BIAS_AR: Record<Direction3, string> = {
   bullish: 'ميل صاعد',
@@ -468,8 +471,8 @@ export function explain(
   if (signal) {
     decisionLabel = decision === 'BUY' ? 'BUY · شراء' : 'SELL · بيع';
     tradeLine = 'نعم — إشارة مؤكدة';
-    headline = 'إشارة مؤكدة من محرك Wese Trade';
-    reason = [FAMILY_AR[signal.family], ...positives.slice(0, 2)].join(' · ');
+    headline = 'إشارة مؤكدة — Strategy 4.3';
+    reason = [signal.family_ar ?? FAMILY_AR[signal.family], ...positives.slice(0, 2)].join(' · ');
   } else if (researchOnly) {
     decisionLabel = 'محايد';
     tradeLine = 'لا';
@@ -495,6 +498,8 @@ export function explain(
     bias: signal ? null : bias,
     biasLabel: signal || !bias ? null : BIAS_AR[bias],
     score: score !== null && Number.isFinite(score) ? score : null,
+    tier: signal?.tier ?? null,
+    tierLabel: signal?.tier ? `${signal.tier} — ${signal.tier_ar ?? ''}` : null,
     candidateScore: !signal && score !== null,
     blockers: [...new Set(blockers)],
     positives,

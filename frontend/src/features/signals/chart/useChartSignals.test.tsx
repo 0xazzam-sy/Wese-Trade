@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useMarketChart } from '@/features/charts/hooks/useMarketChart';
 import { ChartController } from '@/features/charts/lib/ChartController';
-import { forwardTestApi } from '@/services/api/forwardTest';
+import { strategy43Api } from '@/services/api/strategy43';
 import { marketsApi } from '@/services/api/markets';
 import { marketFeed } from '@/services/realtime/marketFeed';
 import { FakeRealtime } from '@/test/fakeRealtime';
@@ -58,7 +58,7 @@ const base = { symbol: 'ETHUSDT', timeframe: '15m', strategy: FORWARD_STRATEGY }
 
 describe('chart signals: persistence + WebSocket', () => {
   it('restores persisted markers after a restart (REST), without regenerating them', async () => {
-    const api = vi.spyOn(forwardTestApi, 'chartSignals').mockResolvedValue({
+    const api = vi.spyOn(strategy43Api, 'chartSignals').mockResolvedValue({
       symbol: 'ETHUSDT',
       timeframe: '15m',
       signal_capable: true,
@@ -73,7 +73,7 @@ describe('chart signals: persistence + WebSocket', () => {
   });
 
   it('a new confirmed signal arrives live: marker without refresh, never duplicated', async () => {
-    vi.spyOn(forwardTestApi, 'chartSignals').mockResolvedValue({
+    vi.spyOn(strategy43Api, 'chartSignals').mockResolvedValue({
       symbol: 'ETHUSDT',
       timeframe: '15m',
       signal_capable: true,
@@ -109,7 +109,7 @@ describe('chart signals: persistence + WebSocket', () => {
   });
 
   it('history + live copy of the same signal = one marker', async () => {
-    vi.spyOn(forwardTestApi, 'chartSignals').mockResolvedValue({
+    vi.spyOn(strategy43Api, 'chartSignals').mockResolvedValue({
       symbol: 'ETHUSDT',
       timeframe: '15m',
       signal_capable: true,
@@ -126,7 +126,7 @@ describe('chart signals: persistence + WebSocket', () => {
   });
 
   it('two charts are independent: no cross-chart marker leakage', async () => {
-    vi.spyOn(forwardTestApi, 'chartSignals').mockImplementation((symbol, timeframe) =>
+    vi.spyOn(strategy43Api, 'chartSignals').mockImplementation((symbol, timeframe) =>
       Promise.resolve({
         symbol,
         timeframe,
@@ -148,7 +148,7 @@ describe('chart signals: persistence + WebSocket', () => {
   });
 
   it('research-only timeframe: no request, no markers, even if an event arrives', async () => {
-    const api = vi.spyOn(forwardTestApi, 'chartSignals');
+    const api = vi.spyOn(strategy43Api, 'chartSignals');
     const { result } = chart('ETHUSDT', '5m');
     await waitFor(() => {
       expect(result.current.state.load.status).toBe('ready');

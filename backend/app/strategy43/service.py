@@ -492,7 +492,7 @@ class Strategy43Service:
             "label_ar": "Strategy 4.3",
             "forward_test": False,
             "signal_capable": capable,
-            "score_calibrated": True,
+            "score_calibrated": False,
             "note_ar": NOTE_AR,
             "scope_note_ar": None,
         }

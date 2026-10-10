@@ -1,3 +1,4 @@
+import type { OpportunityDTO } from '@/types/strategy43';
 import type { SignalDTO, SignalEvaluationDTO, SignalView, StrategyInfo } from '@/types/signal';
 
 export const SIGNAL_EVENTS = [
@@ -40,7 +41,11 @@ export function applySignalEvent(
   if (data.symbol !== expected.symbol || data.timeframe !== expected.timeframe) return view;
   const prev = view ?? emptyView(expected.symbol, expected.timeframe);
   const strategy = (data.strategy as StrategyInfo | undefined) ?? prev.strategy;
-  const base = strategy === prev.strategy ? prev : { ...prev, strategy };
+  const withStrategy = strategy === prev.strategy ? prev : { ...prev, strategy };
+  const base =
+    'best' in data
+      ? { ...withStrategy, best: (data.best as OpportunityDTO | null | undefined) ?? null }
+      : withStrategy;
   const signal = (data.signal as SignalDTO | undefined) ?? null;
   const evaluation = (data.evaluation as SignalEvaluationDTO | undefined) ?? null;
   switch (type) {

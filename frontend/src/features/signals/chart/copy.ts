@@ -2,18 +2,19 @@
 export const CHART_SIGNAL_AR = {
   question: 'موقف النظام الآن',
   neutral: 'محايد',
-  neutralDetail: 'لا توجد فرصة دخول مؤكدة حسب الاستراتيجية حالياً',
+  neutralDetail: 'لا توجد فرصة مناسبة على هذا الفريم حالياً',
   buy: 'BUY — شراء',
   sell: 'SELL — بيع',
-  enabled: 'Strategy 4.2',
+  enabled: 'Strategy 4.3',
   researchOnly: 'توقيت الدخول',
   researchOnlyDetail: 'قرار التوقيت لهذا الفريم في لوحة التنفيذ',
-  paused: 'متابعة الإشارات غير نشطة حالياً — لا تصدر إشارات جديدة',
-  forward: 'Strategy 4.2',
+  paused: 'محرك الإشارات قيد التشغيل — يجري تحليل الشموع المغلقة',
+  forward: 'Strategy 4.3',
   unproven: 'تحليلية',
   disclaimer: 'الإشارة تحليلية وليست توصية مضمونة.',
   uncalibrated: 'غير معايرة',
-  strategyName: 'Trend Continuation',
+  strategyName: 'Strategy 4.3',
+  bestOther: 'أفضل فرصة لهذه العملة:',
   legendButton: 'شرح الشارت',
   legendAuthority:
     'هذه العلامات تشرح تحليل السوق فقط. قرار BUY أو SELL يصدر حصراً من محرك إشارات Wese Trade.',
@@ -48,8 +49,8 @@ export function formatSignalTime(seconds: number): string {
   )}:${pad(d.getMinutes())}`;
 }
 
-/** "wese-trade-forward-4.2-a03e20f1d4" → "4.2-a03e20f" (the short strategy fingerprint). */
+/** "wese-trade-strategy-4.3-6044cea28a" → "4.3-6044cea" (also 4.2 forward versions). */
 export function fingerprintOf(version: string): string {
-  const m = /forward-(\d+\.\d+)-([0-9a-f]{7})/.exec(version);
+  const m = /-(\d+\.\d+)-([0-9a-f]{7})[0-9a-f]*$/.exec(version);
   return m ? `${m[1] ?? ''}-${m[2] ?? ''}` : version;
 }

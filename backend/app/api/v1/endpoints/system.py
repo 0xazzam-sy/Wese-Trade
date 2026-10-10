@@ -11,6 +11,8 @@ from app import __version__
 from app.api.deps import CurrentUser, Resources, get_current_user
 from app.forward_test.candidate import DISPLAY_NAME
 from app.models.user import UserRole
+from app.strategy43.config import NAME as STRATEGY43_NAME
+from app.strategy43.config import fingerprint, strategy_version
 
 router = APIRouter(prefix="/system", tags=["system"])
 
@@ -19,11 +21,18 @@ router = APIRouter(prefix="/system", tags=["system"])
 async def runtime(resources: Resources, user: CurrentUser) -> dict[str, Any]:
     settings = resources.settings
     forward = resources.forward_test
+    version43 = strategy_version()
     payload: dict[str, Any] = {
         "app_version": __version__,
         "mode": settings.runtime_mode.value,
         "market_provider": "OKX",
         "strategy": {
+            "name": STRATEGY43_NAME,
+            "version": version43,
+            "fingerprint": fingerprint(version43),
+            "status": "live" if resources.strategy43 is not None else None,
+        },
+        "baseline": {
             "name": DISPLAY_NAME,
             "version": forward.version if forward else None,
             "fingerprint": forward.fingerprint if forward else None,

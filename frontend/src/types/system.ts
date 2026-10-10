@@ -18,6 +18,13 @@ export interface RuntimeInfo {
     fingerprint: string | null;
     status: string | null;
   };
+  /** The frozen Strategy 4.2 forward test kept as the baseline (v1.2). */
+  baseline?: {
+    name: string;
+    version: string | null;
+    fingerprint: string | null;
+    status: string | null;
+  };
   news_enabled: boolean;
   weather_enabled: boolean;
   paths?: { root: string; data: string; logs: string; exports: string; backups: string };

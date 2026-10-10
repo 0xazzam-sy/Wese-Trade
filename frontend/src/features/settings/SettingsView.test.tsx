@@ -19,6 +19,12 @@ const RUNTIME: RuntimeInfo = {
   mode: 'development',
   market_provider: 'OKX',
   strategy: {
+    name: 'Wese Trade Strategy 4.3',
+    version: 'wese-trade-strategy-4.3-6044cea28a',
+    fingerprint: '4.3-6044cea',
+    status: 'live',
+  },
+  baseline: {
     name: 'Wese Trade Forward 4.2',
     version: 'wese-trade-forward-4.2-a03e20f1d4',
     fingerprint: '4.2-a03e20f',
@@ -32,7 +38,7 @@ function mocks() {
   vi.spyOn(systemApi, 'runtime').mockResolvedValue(RUNTIME);
   vi.spyOn(forwardTestApi, 'status').mockResolvedValue({
     name: 'Wese Trade Forward 4.2',
-    version: RUNTIME.strategy.version ?? '',
+    version: RUNTIME.baseline?.version ?? '',
     fingerprint: '4.2-a03e20f',
     disclaimer_ar: '',
     health: 'running',
@@ -41,7 +47,7 @@ function mocks() {
       status: 'forward_testing',
       status_ar: 'اختبار مباشر',
       started_at: '2026-10-05T09:13:04+00:00',
-      strategy_version: RUNTIME.strategy.version ?? '',
+      strategy_version: RUNTIME.baseline?.version ?? '',
       fingerprint: '4.2-a03e20f',
     },
   });
@@ -58,14 +64,19 @@ describe('SettingsView', () => {
     loginAs('viewer');
     mocks();
     renderApp(<SettingsView />, '/settings');
-    expect(await screen.findByText('4.2-a03e20f')).toHaveAttribute(
+    expect(await screen.findByText('4.3-6044cea')).toHaveAttribute(
       'data-testid',
       'settings-fingerprint',
     );
     expect(screen.getByTestId('app-version')).toHaveTextContent('1.0.0');
     expect(screen.getByText('viewer-user')).toBeInTheDocument();
     expect(screen.getByText('مشاهد')).toBeInTheDocument();
-    expect(await screen.findByText('متابعة مباشرة')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByLabelText('استراتيجية الإشارات')).toHaveTextContent(
+        '4.2-a03e20f · متابعة مباشرة',
+      );
+    });
+    expect(screen.queryByLabelText('تنبيهات Telegram')).toBeNull(); // admin only
     expect(screen.getByLabelText('مزود بيانات السوق')).toHaveTextContent('OKX');
     expect(screen.getByTestId('settings-view')).toHaveTextContent(
       'الإشارات تحليلية وليست توصيات مضمونة',

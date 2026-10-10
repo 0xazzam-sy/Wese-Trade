@@ -72,6 +72,30 @@ async def opportunities(service: Service, limit: int = Query(20, ge=1, le=100)) 
     }
 
 
+@router.get("/chart-signals")
+async def chart_signals(
+    service: Service,
+    symbol: str,
+    timeframe: Timeframe,
+    limit: int = Query(200, ge=1, le=500),
+) -> dict[str, Any]:
+    """Persisted confirmed 4.3 signals of one chart stream (markers survive restarts)."""
+    capable = timeframe.value in TIMEFRAMES
+    items: list[dict[str, Any]] = []
+    if capable and service.database is not None:
+        async with service.database.session_factory() as session:
+            rows = await store.recent_signals(session, symbol.upper(), timeframe.value, limit)
+        items = [service.signal_view(s) for s in rows]
+    return {
+        "symbol": symbol.upper(),
+        "timeframe": timeframe.value,
+        "signal_capable": capable,
+        "strategy_version": service.version,
+        "fingerprint": service.fingerprint,
+        "items": items,
+    }
+
+
 @router.get("/{symbol}")
 async def stream_state(symbol: str, timeframe: Timeframe, service: Service) -> dict[str, Any]:
     if timeframe.value not in TIMEFRAMES:

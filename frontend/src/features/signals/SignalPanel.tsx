@@ -17,9 +17,14 @@ import type { ChartId } from '@/stores/layoutStore';
 import type { AnalysisSnapshot } from '@/types/analysis';
 import type { StrategyInfo, TradePlanDTO } from '@/types/signal';
 
+import { CHART_SIGNAL_AR } from '@/features/signals/chart/copy';
+import { BestOpportunity } from '@/features/strategy43/BestOpportunity';
+import { TIER_STYLE } from '@/types/strategy43';
+
 import { SignalDetails } from './components/SignalDetails';
 import {
   explain,
+  NO_ENTRY_TEXT,
   SCORE_LABEL,
   SCORE_TOOLTIP,
   type CategoryRow,
@@ -110,13 +115,13 @@ function PlanCell({
 
 /** Validation status of the strategy: never lets a signal look "proven" when it is not. */
 function StrategyBadge({ strategy }: { strategy: StrategyInfo }) {
-  const forward = strategy.forward_test;
+  const forward = strategy.forward_test || strategy.status === 'live';
   const fp = strategy.fingerprint ? ` · ${strategy.fingerprint}` : '';
   return (
     <span
       data-testid="strategy-status"
       data-status={strategy.status}
-      title={`Strategy 4.2 (${strategy.version}${fp})`}
+      title={`${strategy.name ?? 'Strategy'} (${strategy.version}${fp})`}
       className={cn(
         'text-2xs ms-auto truncate rounded-md border px-1.5 py-0.5 font-medium',
         forward
@@ -124,7 +129,7 @@ function StrategyBadge({ strategy }: { strategy: StrategyInfo }) {
           : 'border-warning/40 bg-warning/10 text-warning',
       )}
     >
-      Strategy 4.2
+      {CHART_SIGNAL_AR.enabled}
     </span>
   );
 }
@@ -369,6 +374,22 @@ export function SignalPanel() {
                 {x.tradeLine}
               </dd>
             </div>
+            {x.tier && x.tierLabel && (
+              <div className="flex min-w-0 items-baseline gap-1.5" data-testid="signal-tier">
+                <dt className="text-fg-subtle shrink-0">جودة الفرصة:</dt>
+                <dd>
+                  <span
+                    data-tier={x.tier}
+                    className={cn(
+                      'rounded border px-1.5 text-xs font-semibold',
+                      TIER_STYLE[x.tier],
+                    )}
+                  >
+                    {x.tierLabel}
+                  </span>
+                </dd>
+              </div>
+            )}
             <div className="flex min-w-0 items-baseline gap-1.5" data-testid="signal-state">
               <dt className="text-fg-subtle shrink-0">ليش؟</dt>
               <dd
@@ -439,7 +460,12 @@ export function SignalPanel() {
               title={x.blockers.join('\n')}
               className="bg-sunken/60 border-line rounded-lg border px-2.5 py-1"
             >
-              <h3 className="text-xs font-semibold">ما الذي يمنع الدخول حالياً؟</h3>
+              <h3 className="text-xs font-semibold" data-testid="no-trade-line">
+                {strategy?.signal_capable ? NO_ENTRY_TEXT : 'ما الذي يمنع الدخول حالياً؟'}
+              </h3>
+              {strategy?.signal_capable && (
+                <BestOpportunity best={view?.best} timeframe={context.timeframe} />
+              )}
               {x.blockers.length > 0 ? (
                 <ul className="text-fg-muted text-2xs mt-0.5 grid grid-cols-2 gap-x-4 gap-y-0.5">
                   {x.blockers.slice(0, 4).map((b) => (

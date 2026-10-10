@@ -3,6 +3,8 @@
  * `score` is a 0-100 CONFLUENCE / setup-quality score. It is NOT a probability of profit
  * and must never be displayed as one. Signals are analytical; there is no trading API.
  */
+import type { OpportunityDTO, Tier } from './strategy43';
+
 export type SignalClass = 'STRONG_BUY' | 'BUY' | 'NEUTRAL' | 'SELL' | 'STRONG_SELL';
 export type SignalSide = 'long' | 'short';
 export type SetupFamily =
@@ -111,9 +113,17 @@ export interface SignalDTO {
   gross_r: number | null;
   net_r: number | null;
   history: [number, string][];
+  /** Strategy 4.3 quality tier and display labels (absent on 4.2 signals). */
+  tier?: Tier;
+  tier_ar?: string;
+  family_ar?: string;
+  state_ar?: string;
+  valid_until?: number;
 }
 
 export type ValidationStatus =
+  | 'live'
+  | 'starting'
   | 'unproven'
   | 'testing'
   | 'passed_historical'
@@ -154,4 +164,6 @@ export interface SignalView {
   active: SignalDTO | null; // open confirmed signal
   lastConfirmed: SignalDTO | null;
   lastClosed: SignalDTO | null;
+  /** Best open Strategy 4.3 opportunity of this symbol on any primary timeframe. */
+  best?: OpportunityDTO | null;
 }

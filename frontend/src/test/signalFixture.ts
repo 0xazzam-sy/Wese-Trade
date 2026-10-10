@@ -89,15 +89,15 @@ export const STRATEGY: StrategyInfo = {
 };
 
 export const FORWARD_STRATEGY: StrategyInfo = {
-  version: 'wese-trade-forward-4.2-a03e20f1d4',
-  status: 'forward_testing',
-  status_ar: 'اختبار مباشر',
-  label_ar: 'اختبار مباشر',
-  forward_test: true,
+  version: 'wese-trade-strategy-4.3-6044cea28a',
+  status: 'live',
+  status_ar: 'نشط',
+  label_ar: 'Strategy 4.3',
+  forward_test: false,
   signal_capable: true,
-  note_ar: 'الإشارات قيد الاختبار وليست توصيات مضمونة.',
-  fingerprint: '4.2-a03e20f',
-  name: 'Wese Trade Forward 4.2',
+  note_ar: 'تحليل وليس نصيحة مالية.',
+  fingerprint: '4.3-6044cea',
+  name: 'Wese Trade Strategy 4.3',
   score_calibrated: false,
   scope_note_ar: null,
 };
