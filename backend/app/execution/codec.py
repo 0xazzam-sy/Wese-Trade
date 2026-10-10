@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import asdict
 from typing import Any
 
@@ -46,10 +47,16 @@ def plan_from(d: dict[str, Any]) -> Plan:
     )
 
 
+def parent_fingerprint(version: str) -> str:
+    """`wese-trade-strategy-4.3-6044cea28a` -> `4.3-6044cea` (also 4.2 forward versions)."""
+    m = re.search(r"-(\d+\.\d+)-([0-9a-f]+)$", version)
+    return f"{m.group(1)}-{m.group(2)[:7]}" if m else version
+
+
 def parent_payload(p: ParentSetup) -> dict[str, Any]:
     out = asdict(p)
     out["targets"] = list(p.targets)
-    out["fingerprint"] = f"4.2-{p.strategy_version.rsplit('-', 1)[-1][:7]}"
+    out["fingerprint"] = parent_fingerprint(p.strategy_version)
     return out
 
 

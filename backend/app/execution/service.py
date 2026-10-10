@@ -16,10 +16,10 @@ import asyncio
 import contextlib
 import copy
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Protocol
 
 from app.analysis.engine import MarketAnalyzer
 from app.analysis.service import AnalysisService
@@ -34,15 +34,16 @@ from app.execution.models import (
     EXECUTION_VERSION,
     Decision,
     Evaluation,
+    ExecState,
     ExecutionSignal,
     Micro,
     ParentSetup,
 )
-from app.forward_test.candidate import DISPLAY_NAME
-from app.forward_test.service import ForwardTestService
 from app.market_data.engine import MarketDataEngine
 from app.market_data.timeframes import Timeframe
 from app.signal_engine.models import Signal
+from app.strategy43.config import FAMILY_AR, tier
+from app.telegram.models import SignalAlert
 from app.websocket.events import EventEnvelope, EventType
 
 logger = get_logger(__name__)
@@ -53,6 +54,18 @@ FIXED_TIME = datetime(2000, 1, 1, tzinfo=UTC)
 KEEP_SIGNALS = 50
 FRESH_CLOSES = 2  # a confirmation needs a candle that closed at most this many steps ago
 PARENT_TIMEFRAMES = ("15m", "30m", "1h")
+
+
+class ParentSource(Protocol):
+    """The primary-timeframe engine providing parents (Strategy 4.3 in v1.2)."""
+
+    name: str
+
+    @property
+    def streams(self) -> Mapping[AppKey, Any]: ...
+
+
+AlertSink = Callable[[SignalAlert], None]
 
 
 @dataclass(slots=True)
@@ -66,11 +79,11 @@ class _Stream:
     parents_seen: tuple[tuple[str, str], ...] = ()
 
 
-def parent_from_signal(s: Signal) -> ParentSetup:
+def parent_from_signal(s: Signal, strategy: str) -> ParentSetup:
     p = s.plan
     return ParentSetup(
         signal_id=s.id,
-        strategy=DISPLAY_NAME,
+        strategy=strategy,
         strategy_version=s.strategy_version,
         symbol=s.symbol,
         timeframe=s.timeframe,
@@ -94,15 +107,17 @@ class ExecutionService:
         analysis: AnalysisService,
         market: MarketDataEngine,
         database: Database | None,
-        forward_test: ForwardTestService | None,
+        parent_source: ParentSource | None,
         micro: MicroFeed | None = None,
         *,
+        alerts: AlertSink | None = None,
         clock: Callable[[], float] = time.time,
     ) -> None:
         self.analysis = analysis
         self.market = market
         self.database = database
-        self.forward_test = forward_test
+        self.parent_source = parent_source
+        self.alerts = alerts
         self.micro = micro
         self.clock = clock
         self.streams: dict[AppKey, _Stream] = {}
@@ -134,14 +149,14 @@ class ExecutionService:
 
     # --- parents ------------------------------------------------------------------------------
     def parents(self, symbol: str) -> list[ParentSetup]:
-        ft = self.forward_test
-        if ft is None:
+        src = self.parent_source
+        if src is None:
             return []
         out = []
         for tf in PARENT_TIMEFRAMES:
-            stream = ft.streams.get((symbol, Timeframe(tf)))
+            stream = src.streams.get((symbol, Timeframe(tf)))
             if stream is not None and stream.tracker.active is not None:
-                out.append(parent_from_signal(stream.tracker.active))
+                out.append(parent_from_signal(stream.tracker.active, src.name))
         return out
 
     def _parent_state(self, parent: ParentSetup) -> str:
@@ -204,9 +219,7 @@ class ExecutionService:
                 if not s.is_open or s.id in known:
                     continue
                 for bar in bars:
-                    if engine.advance(
-                        s, bar.high, bar.low, bar.close_time, self._parent_state(s.parent)
-                    ):
+                    if self._advance(s, bar.high, bar.low, bar.close_time, alert=False):
                         self._persist(s)
         stream.loaded = True
         self._evaluate(stream, confirm=False)
@@ -227,15 +240,63 @@ class ExecutionService:
         stream = self._stream(key, analyzer)
         bar = analyzer.series.last
         for s in stream.signals:
-            if s.is_open and engine.advance(
-                s, bar.high, bar.low, bar.close_time, self._parent_state(s.parent)
-            ):
+            if s.is_open and self._advance(s, bar.high, bar.low, bar.close_time, alert=True):
                 self._persist(s)
         fresh = self.clock() - bar.close_time <= FRESH_CLOSES * key[1].seconds
         self._evaluate(stream, confirm=fresh and stream.loaded)
 
     def on_forming(self, key: AppKey) -> None:
         return
+
+    def _advance(
+        self, s: ExecutionSignal, high: float, low: float, close_time: int, *, alert: bool
+    ) -> bool:
+        hits, state = s.targets_hit, s.state
+        changed = engine.advance(s, high, low, close_time, self._parent_state(s.parent))
+        if changed and alert:
+            events = [f"TP{n}" for n in range(hits + 1, min(s.targets_hit, 3) + 1)]
+            if s.state is ExecState.STOPPED and state is not ExecState.STOPPED:
+                events.append("STOPPED")
+            elif s.state is ExecState.EXPIRED and state is not ExecState.EXPIRED:
+                events.append("EXPIRED")
+            for event in events:
+                self._alert(s, event)
+        return changed
+
+    def _alert(self, s: ExecutionSignal, event: str) -> None:
+        if self.alerts is None:
+            return
+        try:
+            p = s.plan
+            risk = p.risk or 1.0
+            rr = tuple(round(abs(t - p.entry) / risk, 2) for t in p.targets)
+            precision = None
+            with contextlib.suppress(Exception):
+                precision = self.market.symbols.get(s.symbol).price_precision
+            parent_tier = tier(s.parent.score)
+            self.alerts(
+                SignalAlert(
+                    signal_id=s.id,
+                    event=event,
+                    symbol=s.symbol,
+                    side=s.side,
+                    timeframe=s.timeframe,
+                    primary_timeframe=s.parent.timeframe,
+                    execution_timeframe=s.timeframe,
+                    entry=p.entry,
+                    stop=p.stop,
+                    targets=p.targets,
+                    rr=(rr[0], rr[1], rr[2]),
+                    tier=parent_tier,
+                    score=s.parent.score,
+                    timing_score=s.score,
+                    family_ar=FAMILY_AR.get(s.parent.family, s.parent.family),
+                    signal_time=s.confirmed_time,
+                    price_precision=precision,
+                )
+            )
+        except Exception:  # Telegram can never break the engine
+            logger.exception("execution.alert_failed")
 
     # --- evaluation ---------------------------------------------------------------------------
     def _micro(self, symbol: str) -> Micro | None:
@@ -281,6 +342,7 @@ class ExecutionService:
             stream.signals = [*stream.signals, new][-KEEP_SIGNALS:]
             self.stats["confirmed"] += 1
             self._persist(new)
+            self._alert(new, "NEW")
             logger.info(
                 "execution.confirmed",
                 extra={
@@ -396,7 +458,7 @@ class ExecutionService:
                 }
                 for k, s in self.streams.items()
             },
-            "parent_source": "forward_test" if self.forward_test is not None else None,
+            "parent_source": self.parent_source.name if self.parent_source is not None else None,
             "micro": self.micro.health() if self.micro is not None else None,
             **self.stats,
         }

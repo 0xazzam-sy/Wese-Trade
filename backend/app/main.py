@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Coroutine
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,6 +27,8 @@ from app.forward_test.service import ForwardTestService
 from app.market_data.factory import build_market_engine
 from app.news.service import NewsService
 from app.signal_engine.service import SignalService
+from app.strategy43.service import Strategy43Service
+from app.telegram.service import TelegramService
 from app.weather.service import WeatherService
 from app.web import mount_web
 from app.websocket.events import CLOSE_SERVER_SHUTDOWN
@@ -57,16 +60,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if analysis is not None and market is not None
         else None
     )
-    if signals is not None and forward_test is not None:
-        signals.excluded = forward_test.owns
-        signals.delegate = forward_test
+    telegram = TelegramService(database, settings.signing_key)
+    # Strategy 4.3 is the live signal engine on 15m / 30m / 1h in EVERY runtime mode; the
+    # frozen 4.2 forward test keeps running as the baseline without owning the charts.
+    strategy43 = (
+        Strategy43Service(analysis, market, database, alerts=telegram.notify)
+        if analysis is not None and market is not None
+        else None
+    )
+    if forward_test is not None:
+        forward_test.publish_enabled = False
+    if signals is not None and strategy43 is not None:
+        signals.excluded = strategy43.owns
+        signals.delegate = strategy43
     execution = (
         ExecutionService(
             analysis,
             market,
             database,
-            forward_test,
+            strategy43,
             MicroFeed(settings.okx_public_ws_url) if settings.execution_micro_enabled else None,
+            alerts=telegram.notify,
         )
         if analysis is not None and market is not None
         else None
@@ -83,6 +97,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         signals=signals,
         forward_test=forward_test,
         execution=execution,
+        strategy43=strategy43,
+        telegram=telegram,
         news=news,
         weather=weather,
     )
@@ -110,6 +126,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await resources.market.start()
         if resources.analysis is not None:
             await resources.analysis.start()
+        await _start_isolated("telegram", telegram.start())
+        if resources.strategy43 is not None:
+            await resources.strategy43.start()
         if resources.signals is not None:
             await resources.signals.start()
         if resources.forward_test is not None:
@@ -122,6 +141,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         await weather.close()
         if resources.execution is not None:
             await resources.execution.stop()
+        if resources.strategy43 is not None:
+            await resources.strategy43.stop()
+        await telegram.stop()
         if resources.forward_test is not None:
             await resources.forward_test.stop()
         if resources.signals is not None:
@@ -158,6 +180,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     if settings.web_dir is not None:
         mount_web(app, settings.web_dir, desktop=settings.is_desktop)
     return app
+
+
+async def _start_isolated(name: str, coro: Coroutine[Any, Any, None]) -> None:
+    """Start an optional service; its failure is logged and never blocks startup."""
+    try:
+        await asyncio.wait_for(coro, timeout=15)
+    except Exception:
+        logger.exception(f"{name}.start_failed")
 
 
 async def _ensure_desktop_run(settings: Settings, database: Database) -> None:

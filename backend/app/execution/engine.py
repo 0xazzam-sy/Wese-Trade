@@ -28,8 +28,9 @@ from app.execution.models import (
     Plan,
 )
 
+# v1.2 mapping (Strategy 4.3 parents): 15m -> 1m / 5m, 30m -> 5m / 10m, 1h -> 10m.
 PARENT_TIMEFRAMES: dict[str, tuple[str, ...]] = {
-    "1m": ("15m", "30m"),
+    "1m": ("15m",),
     "5m": ("15m", "30m"),
     "10m": ("30m", "1h"),
 }

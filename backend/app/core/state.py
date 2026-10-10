@@ -14,6 +14,8 @@ from app.forward_test.service import ForwardTestService
 from app.market_data.engine import MarketDataEngine
 from app.news.service import NewsService
 from app.signal_engine.service import SignalService
+from app.strategy43.service import Strategy43Service
+from app.telegram.service import TelegramService
 from app.weather.service import WeatherService
 from app.websocket.manager import ConnectionManager
 
@@ -29,6 +31,8 @@ class AppResources:
     signals: SignalService | None = None
     forward_test: ForwardTestService | None = None
     execution: ExecutionService | None = None
+    strategy43: Strategy43Service | None = None
+    telegram: TelegramService | None = None
     news: NewsService | None = None
     weather: WeatherService | None = None
     # Set by the desktop entrypoint: asks uvicorn to exit gracefully.

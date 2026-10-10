@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
-EXECUTION_VERSION = "wese-trade-execution-1.1"
+EXECUTION_VERSION = "wese-trade-execution-1.2"
 EXECUTION_TIMEFRAMES: tuple[str, ...] = ("1m", "5m", "10m")
 
 

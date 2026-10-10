@@ -128,6 +128,9 @@ class ForwardTestService:
         self._tasks: list[asyncio.Task[Any]] = []
         self._last_poll = 0.0
         self._last_checkpoint_day: str | None = None
+        # v1.2: Strategy 4.3 owns the charts; the frozen 4.2 run keeps running as the
+        # baseline without publishing to chart subscribers when this is False.
+        self.publish_enabled = True
         analysis.listeners.append(self)
 
     # --- lifecycle ------------------------------------------------------------------------
@@ -504,11 +507,15 @@ class ForwardTestService:
         }
 
     def subscribe(self, consumer: str, key: AppKey) -> None:
+        if not self.publish_enabled:
+            return
         self.market.publisher.send_to(
             [consumer], EventEnvelope.of(EventType.SIGNAL_UPDATED, self.state(key))
         )
 
     def _publish(self, key: AppKey, event: EventType, data: dict[str, Any]) -> None:
+        if not self.publish_enabled:
+            return
         consumers = self.analysis.consumers(key) - {CONSUMER}
         if consumers:
             payload = {

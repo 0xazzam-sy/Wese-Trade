@@ -9,6 +9,12 @@ from app.models.forward_test import (
     ForwardTestSignal,
 )
 from app.models.signal import BacktestRunRecord, SignalOutcomeRecord, SignalRecord
+from app.models.strategy43 import Strategy43CursorRecord, Strategy43SignalRecord
+from app.models.telegram import (
+    TelegramDeliveryRecord,
+    TelegramRecipientRecord,
+    TelegramSettingsRecord,
+)
 from app.models.user import User, UserRole
 
 __all__ = [
@@ -21,6 +27,11 @@ __all__ = [
     "ForwardTestSignal",
     "SignalOutcomeRecord",
     "SignalRecord",
+    "Strategy43CursorRecord",
+    "Strategy43SignalRecord",
+    "TelegramDeliveryRecord",
+    "TelegramRecipientRecord",
+    "TelegramSettingsRecord",
     "User",
     "UserRole",
 ]

@@ -11,7 +11,9 @@ from app.api.v1.endpoints import (
     markets,
     news,
     signals,
+    strategy43,
     system,
+    telegram,
     users,
     weather,
 )
@@ -26,6 +28,8 @@ api_router.include_router(analysis.router)
 api_router.include_router(signals.router)
 api_router.include_router(forward_test.router)
 api_router.include_router(execution.router)
+api_router.include_router(strategy43.router)
+api_router.include_router(telegram.router)
 api_router.include_router(users.router)
 api_router.include_router(weather.router)
 api_router.include_router(system.router)

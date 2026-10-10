@@ -95,6 +95,7 @@ def parent_signal(close: float, tf: str = "15m", side: Side = Side.LONG) -> Sign
 
 def forward(*signals: Signal) -> Any:
     return SimpleNamespace(
+        name="Wese Trade Strategy 4.3",
         streams={
             (s.symbol, Timeframe(s.timeframe)): SimpleNamespace(tracker=SimpleNamespace(active=s))
             for s in signals
