@@ -81,3 +81,24 @@ def test_closed_push_after_missed_candles_is_a_gap() -> None:
     s.apply_live(candle(0, closed=True), trust_close=True)
     result = s.apply_live(candle(15, closed=True), trust_close=True)
     assert result.gap is True
+
+
+def test_stream_cache_never_evicts_the_requested_stream() -> None:
+    """v1.2 regression: with every cached stream live (scanner), requesting a NEW stream
+    above the cap must return it, not evict it and raise KeyError."""
+    from typing import Any
+
+    from app.market_data.services import candle_service
+    from app.market_data.services.candle_service import MAX_STREAMS, CandleService
+
+    service = CandleService(provider=None)  # type: ignore[arg-type]
+    for i in range(MAX_STREAMS):
+        service.stream(f"S{i}USDT", Timeframe.M15).live = True
+    extra: Any = service.stream("NEWUSDT", Timeframe.M15)
+    assert extra.symbol == "NEWUSDT"
+    assert service.existing("NEWUSDT", Timeframe.M15) is extra
+    assert len(service._streams) == MAX_STREAMS + 1  # live streams are never dropped
+    service.stream("NEWUSDT", Timeframe.M15).live = False
+    service.stream("OTHERUSDT", Timeframe.M15)  # idle overflow is evicted again
+    assert len(service._streams) == MAX_STREAMS + 1
+    assert candle_service.MAX_STREAMS >= 128

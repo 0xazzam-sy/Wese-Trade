@@ -150,6 +150,7 @@ class Strategy43Service:
         self._queue: asyncio.Queue[tuple[str, Any]] = asyncio.Queue()
         self._tasks: list[asyncio.Task[Any]] = []
         self._pending_subs: set[AppKey] = set()
+        self.subscribe_errors: dict[AppKey, str] = {}
         analysis.listeners.append(self)
 
     # --- lifecycle --------------------------------------------------------------------------
@@ -263,7 +264,8 @@ class Strategy43Service:
                 "strategy43.symbol_unavailable",
                 extra={"fields": {"symbol": symbol, "error": str(exc)}},
             )
-        except Exception:
+        except Exception as exc:
+            self.subscribe_errors[key] = repr(exc)[:200]
             logger.exception("strategy43.subscribe_failed")
         finally:
             self._pending_subs.discard(key)
@@ -655,6 +657,12 @@ class Strategy43Service:
             problems.append("لم تصل شموع مغلقة منذ أكثر من ساعة — تحقق من اتصال الإنترنت")
         if self.stats["persist_errors"]:
             problems.append(f"أخطاء حفظ: {self.stats['last_persist_error']}")
+        if self.subscribe_errors:
+            first = next(iter(self.subscribe_errors.items()))
+            problems.append(
+                f"تعذر تشغيل {len(self.subscribe_errors)} من تدفقات المحرك "
+                f"(مثال {first[0][0]} {first[0][1].value}: {first[1]})"
+            )
         if self.unavailable:
             problems.append("رموز غير متاحة: " + ", ".join(sorted(self.unavailable)))
         state = "stopped" if not running else "starting" if not self.ready else "running"

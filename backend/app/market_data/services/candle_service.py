@@ -21,7 +21,7 @@ from app.market_data.timeframes import Timeframe
 from app.utils.time import utc_now
 
 MAX_STORED_CANDLES = 2000
-MAX_STREAMS = 64
+MAX_STREAMS = 256  # v1.2: the live 4.3 scanner alone keeps 90 primary streams + context
 PAGED_HISTORY_TTL = 300.0  # `before=` pages contain only closed candles
 MAX_HISTORY_LIMIT = 1000
 
@@ -192,17 +192,18 @@ class CandleService:
         if found is None:
             found = CandleStream(symbol, timeframe)
             self._streams[key] = found
-            self._evict()
+            self._evict(keep=key)
         self._streams.move_to_end(key)
         return found
 
     def existing(self, symbol: str, timeframe: Timeframe) -> CandleStream | None:
         return self._streams.get((symbol, timeframe))
 
-    def _evict(self) -> None:
+    def _evict(self, keep: tuple[str, Timeframe] | None = None) -> None:
+        """Drop the oldest idle streams above the cap; never the one being requested."""
         while len(self._streams) > MAX_STREAMS:
             for key, stream in self._streams.items():
-                if not stream.live:
+                if key != keep and not stream.live:
                     del self._streams[key]
                     break
             else:
