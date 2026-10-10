@@ -71,7 +71,7 @@ jobs:
           # touches .github/workflows is refused for the workflow token.
           tag_sha="$(gh api -X POST "repos/$GITHUB_REPOSITORY/git/tags" \
             -f tag="$TAG" -f object="$sha" -f type=commit \
-            -f message="Wese Trade $TAG (strategy wese-trade-forward-4.2-a03e20f1d4)" -q .sha)"
+            -f message="Wese Trade $TAG (strategy wese-trade-strategy-4.3-6044cea28a; frozen baseline wese-trade-forward-4.2-a03e20f1d4)" -q .sha)"
           gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$TAG" -f sha="$tag_sha" >/dev/null
           [ "$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" -q .sha)" = "$sha" ]
           echo "created $TAG at $sha"

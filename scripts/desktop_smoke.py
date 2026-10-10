@@ -143,9 +143,10 @@ def main() -> None:
     assert first["needs_setup_at_start"] is True, "expected a fresh installation"
     assert first["account"]["status"] == 201
     assert first["runtime"]["mode"] == "desktop"
+    assert first["runtime"]["strategy"]["version"].startswith("wese-trade-strategy-4.3-")
     assert (
-        first["runtime"]["strategy"]["version"] == "wese-trade-forward-4.2-a03e20f1d4"
-    )
+        first["runtime"]["baseline"]["version"] == "wese-trade-forward-4.2-a03e20f1d4"
+    ), "the frozen Strategy 4.2 baseline must be unchanged"
     assert first["forward_run"]["status"] == "forward_testing"
     assert first["backend_stopped_gracefully"] is True
     time.sleep(2)
