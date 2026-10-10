@@ -10,8 +10,8 @@ Silicon**, built from a single shared codebase:
 
 End users need no Python, pip, virtualenv, Node, npm or terminal.
 
-> Analysis only. No orders, no exchange accounts, no private exchange APIs.
-> The app version (**1.0.1**, SemVer) is separate from the frozen strategy version
+> Manual trading only. No orders, no exchange accounts, no private exchange APIs.
+> The app version (**1.1.0**, SemVer) is separate from the frozen strategy version
 > **`wese-trade-forward-4.2-a03e20f1d4`**, which is unchanged.
 
 ## 1. Architecture

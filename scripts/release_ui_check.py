@@ -5,7 +5,7 @@
 
 Launches the app normally on a fresh data root (WESE_RUNTIME_ROOT), reads the backend port
 from the app's desktop.log, runs the chart-signal browser E2E (scripts/e2e_chart_signals.mjs:
-first-run admin, real OKX, both charts, legend, layers, analysis-only timeframes, and the
+first-run admin, real OKX, both charts, legend, layers, 1m/5m/10m execution timing, and the
 deterministic frozen-engine BUY/SELL fixture rendered in test mode only), then closes the
 app and checks that no backend process is left. No credentials are printed.
 """
