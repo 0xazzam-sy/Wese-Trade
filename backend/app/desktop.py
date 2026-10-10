@@ -18,6 +18,7 @@ import os
 import socket
 import sys
 import threading
+import time
 from pathlib import Path
 
 EXIT_CONFIG = 2
@@ -42,6 +43,13 @@ def _bind(port: int) -> socket.socket:
     sock.listen(128)
     sock.set_inheritable(True)
     return sock
+
+
+_T0 = time.monotonic()  # process start (startup-phase diagnostics)
+
+
+def _elapsed() -> float:
+    return round(time.monotonic() - _T0, 2)
 
 
 def main() -> int:
@@ -75,7 +83,13 @@ def main() -> int:
         return EXIT_MIGRATION
     logger.info(
         "desktop.database_ready",
-        extra={"fields": {"from": result.from_revision, "to": result.to_revision}},
+        extra={
+            "fields": {
+                "from": result.from_revision,
+                "to": result.to_revision,
+                "elapsed_s": _elapsed(),
+            }
+        },
     )
 
     port = int(os.environ.get("WESE_PORT", "0"))
@@ -91,6 +105,7 @@ def main() -> int:
     from app.main import create_app
 
     app = create_app(settings)
+    logger.info("desktop.app_created", extra={"fields": {"elapsed_s": _elapsed()}})
     config = uvicorn.Config(
         app,
         log_config=None,
@@ -119,7 +134,10 @@ def main() -> int:
 
         threading.Thread(target=watch_parent, name="parent-watchdog", daemon=True).start()
 
-    logger.info("desktop.serving", extra={"fields": {"host": LOOPBACK, "port": port}})
+    logger.info(
+        "desktop.serving",
+        extra={"fields": {"host": LOOPBACK, "port": port, "elapsed_s": _elapsed()}},
+    )
     server.run(sockets=[sock])
     logger.info("desktop.stopped")
     return 0

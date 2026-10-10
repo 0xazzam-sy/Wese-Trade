@@ -1,4 +1,4 @@
-# Execution timing (v1.1): 1m / 5m / 10m under Strategy 4.2
+# Execution timing: 1m / 5m / 10m under the primary strategy
 
 ## Why this layer exists
 
@@ -20,15 +20,20 @@ on 1m / 5m / 10m.
   Strategy 4.2 signal on a lower timeframe. A 1m / 5m / 10m BUY / SELL is an execution
   confirmation in the parent direction. It is never an independent or countertrend signal.
 
+> **v1.2:** parents now come from the live **Strategy 4.3** engine (`docs/strategy-4.3.md`).
+> The mapping is 15m → 1m / 5m, 30m → 5m / 10m and 1h → 10m. The table below shows it. The
+> frozen Strategy 4.2 forward test keeps running as the baseline, but it no longer supplies
+> parents. Confirmations and their TP / SL events are sent to Telegram (`docs/telegram.md`).
+
 ## Parent link
 
 | Execution timeframe | Role | Parent timeframes |
 | --- | --- | --- |
-| 1m | precise entry timing | 15m, 30m |
+| 1m | precise entry timing | 15m |
 | 5m | primary execution confirmation | 15m, 30m |
 | 10m | bridge between Strategy 4.2 and execution | 30m, 1h |
 
-- **Source of the parent:** the open forward-test signal (`ForwardTestService` trackers).
+- **Source of the parent:** the open Strategy 4.3 signal (`Strategy43Service` trackers; v1.1 used the 4.2 forward test).
 - **Choosing a parent:** the most recent open parent is used.
 - **Conflicting parents:** open parents with opposite sides block execution.
 - **What each signal stores:**

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import AsyncIterator, Coroutine
 from contextlib import asynccontextmanager
 from typing import Any
@@ -105,6 +106,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        t0 = time.monotonic()
         logger.info(
             "app.starting",
             extra={"fields": {"env": settings.app_env.value, "version": __version__}},
@@ -136,6 +138,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if resources.execution is not None:
             await resources.execution.start()
         await news.start()
+        logger.info("app.ready", extra={"fields": {"startup_s": round(time.monotonic() - t0, 2)}})
         yield
         await news.stop()
         await weather.close()

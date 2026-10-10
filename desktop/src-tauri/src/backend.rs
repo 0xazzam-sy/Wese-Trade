@@ -22,7 +22,10 @@ pub const EXIT_CONFIG: i32 = 2;
 pub const EXIT_MIGRATION: i32 = 3;
 pub const EXIT_PORT_IN_USE: i32 = 4;
 
-const HEALTH_TIMEOUT: Duration = Duration::from_secs(120);
+/// Per attempt. A cold first launch on Windows (PyInstaller unpack + antivirus scan of
+/// every DLL) can take minutes; a second attempt is warm, so one timeout is retried.
+const HEALTH_TIMEOUT: Duration = Duration::from_secs(150);
+const PROGRESS_EVERY: Duration = Duration::from_secs(15);
 
 /// What the splash / crash page shows (polled through `startup_status`).
 #[derive(Clone, Debug, Serialize, PartialEq)]
@@ -102,7 +105,8 @@ impl Backend {
         self.stopping.store(false, Ordering::SeqCst);
         self.set_status(Status::Starting);
         let mut last_code = None;
-        for _attempt in 0..3 {
+        let mut timeouts = 0;
+        for attempt in 0..3 {
             let port = match self.launch.fixed_port {
                 Some(p) => p,
                 None => free_port().map_err(|e| self.fail(format!("port: {e}"), None))?,
@@ -111,7 +115,10 @@ impl Backend {
                 .spawn(port)
                 .map_err(|e| self.fail(format!("spawn: {e}"), None))?;
             let stdin = child.stdin.take();
-            let deadline = Instant::now() + HEALTH_TIMEOUT;
+            let began = Instant::now();
+            let deadline = began + HEALTH_TIMEOUT;
+            let mut next_progress = began + PROGRESS_EVERY;
+            let mut timed_out = false;
             loop {
                 if let Ok(Some(status)) = child.try_wait() {
                     last_code = status.code();
@@ -128,12 +135,35 @@ impl Backend {
                     log::info!("backend ready on 127.0.0.1:{port}");
                     return Ok(port);
                 }
-                if Instant::now() > deadline {
+                let now = Instant::now();
+                if now >= next_progress {
+                    // deterministic diagnostics: the process is alive but not serving yet
+                    log::info!(
+                        "backend still starting (attempt {}, {}s, port {port})",
+                        attempt + 1,
+                        now.duration_since(began).as_secs()
+                    );
+                    next_progress = now + PROGRESS_EVERY;
+                }
+                if now > deadline {
+                    log::warn!(
+                        "backend health timeout after {}s (attempt {})",
+                        HEALTH_TIMEOUT.as_secs(),
+                        attempt + 1
+                    );
                     let _ = child.kill();
                     let _ = child.wait();
-                    return Err(self.fail("health_timeout".into(), None));
+                    timed_out = true;
+                    break;
                 }
                 std::thread::sleep(Duration::from_millis(250));
+            }
+            if timed_out {
+                timeouts += 1;
+                if timeouts >= 2 {
+                    return Err(self.fail("health_timeout".into(), None));
+                }
+                continue; // one warm retry after a cold-start timeout
             }
             if last_code != Some(EXIT_PORT_IN_USE) || self.launch.fixed_port.is_some() {
                 break; // only a port race is worth retrying

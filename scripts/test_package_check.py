@@ -89,24 +89,45 @@ class Client:
             return status, raw[:200]
 
 
+# The shell waits up to 2 x 150 s for /health (one bounded retry after a cold-start
+# timeout, see desktop/src-tauri/src/backend.rs); this deadline covers both attempts.
+READY_DEADLINE = 360
+
+
+def dump_logs(log: Path) -> None:
+    """Startup diagnostics: the tail of every desktop log (never secrets: no tokens)."""
+    for path in sorted(log.parent.glob("*.log")):
+        try:
+            tail = path.read_text(encoding="utf-8", errors="replace").splitlines()[-40:]
+        except OSError:
+            continue
+        print(f"--- {path.name} (last {len(tail)} lines)", flush=True)
+        for line in tail:
+            print(f"    {line}", flush=True)
+
+
 def launch(
     app: Path, log: Path, env: dict[str, str]
 ) -> tuple[subprocess.Popen[bytes], int]:
     offset = log.stat().st_size if log.exists() else 0
+    started = time.monotonic()
     proc = subprocess.Popen([str(app)], env=env)
-    deadline = time.monotonic() + 180
+    deadline = started + READY_DEADLINE
     while time.monotonic() < deadline:
         if proc.poll() is not None:
+            dump_logs(log)
             raise SystemExit(f"app exited during startup (code {proc.returncode})")
         if log.exists():
             with log.open("rb") as fh:
                 fh.seek(offset)
                 found = READY.findall(fh.read().decode("utf-8", "replace"))
             if found:
+                print(f"   ready after {time.monotonic() - started:.1f}s", flush=True)
                 return proc, int(found[-1])
         time.sleep(0.5)
     proc.kill()
-    raise SystemExit("backend never became ready")
+    dump_logs(log)
+    raise SystemExit(f"backend never became ready within {READY_DEADLINE}s")
 
 
 def close_app(proc: subprocess.Popen[bytes], log: Path) -> None:
@@ -190,7 +211,17 @@ def session_checks(
         if isinstance(runtime, dict)
         else None
     )
-    check("frozen strategy unchanged", version == FROZEN, str(version))
+    baseline = (
+        runtime.get("baseline", {}).get("version")
+        if isinstance(runtime, dict)
+        else None
+    )
+    check("frozen Strategy 4.2 baseline unchanged", baseline == FROZEN, str(baseline))
+    check(
+        "Strategy 4.3 is the live signal engine",
+        isinstance(version, str) and version.startswith("wese-trade-strategy-4.3-"),
+        str(version),
+    )
     root = (
         (runtime or {}).get("paths", {}).get("root")
         if isinstance(runtime, dict)
@@ -290,10 +321,18 @@ def session_checks(
         status, sig15 = viewer.call("GET", "/signals/BTCUSDT?timeframe=15m")
         strat = sig15.get("strategy", {}) if isinstance(sig15, dict) else {}
         check(
-            "15m signal-enabled (forward test)",
+            "15m signal-enabled (Strategy 4.3)",
             status == 200
             and strat.get("signal_capable") is True
-            and strat.get("version") == FROZEN,
+            and str(strat.get("version", "")).startswith("wese-trade-strategy-4.3-"),
+        )
+        status, health = viewer.call("GET", "/strategy43/health")
+        check(
+            "Strategy 4.3 engine running",
+            status == 200
+            and isinstance(health, dict)
+            and health.get("state") in ("running", "starting", "degraded"),
+            str(health.get("state") if isinstance(health, dict) else status),
         )
         status, sig5 = viewer.call("GET", "/signals/BTCUSDT?timeframe=5m")
         strat5 = sig5.get("strategy", {}) if isinstance(sig5, dict) else {}
