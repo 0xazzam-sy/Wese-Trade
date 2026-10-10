@@ -198,10 +198,12 @@ class Strategy43Service:
 
     async def build_universe(self) -> list[str]:
         def active(symbol: str) -> bool:
+            # same methodology as the research universe: live crypto USDT perpetuals only
             try:
-                return self.market.symbols.get(symbol).is_active
+                info = self.market.symbols.get(symbol)
             except MarketDataError:
                 return False
+            return info.is_active and info.is_crypto
 
         core = [s for s in CORE_UNIVERSE if active(s)]
         ranked: list[tuple[float, str]] = []

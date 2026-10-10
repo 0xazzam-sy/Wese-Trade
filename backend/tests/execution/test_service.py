@@ -99,7 +99,7 @@ def forward(*signals: Signal) -> Any:
         streams={
             (s.symbol, Timeframe(s.timeframe)): SimpleNamespace(tracker=SimpleNamespace(active=s))
             for s in signals
-        }
+        },
     )
 
 

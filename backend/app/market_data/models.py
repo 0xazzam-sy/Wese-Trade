@@ -43,6 +43,12 @@ class MarketSymbol:
     # Contract specification: sizes (step/min quantity) are in CONTRACTS of this value.
     contract_value: Decimal | None = None
     contract_value_currency: str | None = None
+    # OKX instCategory: "1" crypto, others are tokenized stocks / commodities / indices.
+    category: str = "1"
+
+    @property
+    def is_crypto(self) -> bool:
+        return self.category == "1"
 
     @property
     def is_active(self) -> bool:

@@ -131,6 +131,7 @@ def parse_instrument(raw: Any) -> MarketSymbol | None:
         trading_enabled=state == "live",
         contract_value=to_optional_decimal(item.get("ctVal"), "ctVal"),
         contract_value_currency=str(item.get("ctValCcy") or "") or None,
+        category=str(item.get("instCategory") or "1"),
     )
 
 

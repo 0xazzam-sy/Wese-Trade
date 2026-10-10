@@ -215,6 +215,8 @@ class TelegramService:
                 raise
             except Exception:
                 logger.exception("telegram.dispatch_failed")
+            finally:
+                self._queue.task_done()
 
     async def _dispatch(self, alert: SignalAlert, only: int | None = None) -> list[int]:
         """Create delivery rows (dedupe) and start sending. Returns the new delivery ids."""
@@ -320,11 +322,13 @@ class TelegramService:
             self._spawn(delivery_id, chat_id, text)
 
     async def drain(self) -> None:
-        """Wait until queued alerts are dispatched and sends finish (tests / admin)."""
-        while not self._queue.empty() or self._sends:
-            await asyncio.sleep(0.01)
-            if self._sends:
-                await asyncio.gather(*list(self._sends), return_exceptions=True)
+        """Wait until queued alerts are dispatched and their sends finish (tests / admin)."""
+        while True:
+            if self._worker is not None and not self._worker.done():
+                await self._queue.join()
+            if not self._sends:
+                return
+            await asyncio.gather(*list(self._sends), return_exceptions=True)
 
     # --- admin: bot ------------------------------------------------------------------------
     async def set_token(self, token: str) -> dict[str, Any]:
