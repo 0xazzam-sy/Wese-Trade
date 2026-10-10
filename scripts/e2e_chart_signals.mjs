@@ -122,7 +122,7 @@ async function noOverflow(label) {
   check(`${label}: no horizontal page scroll`, !pageOverflow);
 }
 
-// --- live: default charts (BTCUSDT 15m Strategy 4.2, ETHUSDT 5m execution timing) ------------
+// --- live: default charts (BTCUSDT 15m Strategy 4.3, ETHUSDT 5m execution timing) ------------
 await page.goto(BASE, { waitUntil: "networkidle" });
 await waitReady("primary");
 await waitReady("secondary");
@@ -138,10 +138,81 @@ const primaryState = await page
   .locator('section[data-chart="primary"] [data-testid="chart-signal-status"]')
   .getAttribute("data-state");
 check(
-  "live 15m status is canonical (neutral unless the engine has an open signal)",
-  ["neutral", "buy", "sell", "paused"].includes(primaryState),
+  "live 15m status is canonical and never 'inactive' (Strategy 4.3 always on)",
+  ["neutral", "buy", "sell"].includes(primaryState),
   primaryState,
 );
+// v1.2: live signal engine health + market scanner
+await page.waitForFunction(
+  () =>
+    ["running", "degraded"].includes(
+      document.querySelector('[data-testid="engine-status"]')?.getAttribute("data-state") ?? "",
+    ),
+  null,
+  { timeout: 120_000 },
+);
+const engineText = await page.getByTestId("engine-status").innerText();
+check("engine status: «محرك الإشارات» نشط", engineText.includes("نشط"), engineText.split("\n")[1]);
+for (const label of ["آخر تحديث للسوق", "آخر شمعة تم تحليلها", "آخر فحص للفرص", "آخر إشارة",
+  "عدد الفرص المفتوحة", "عدد الإشارات اليوم", "Telegram"])
+  check(`engine status shows «${label}»`, engineText.includes(label));
+check(
+  "no «متابعة الإشارات غير نشطة» anywhere",
+  !(await page.locator("body").innerText()).includes("غير نشطة"),
+);
+const scanner = page.getByTestId("opportunity-scanner");
+check("«أفضل الفرص الآن» scanner present", (await scanner.count()) === 1);
+const rows = scanner.getByTestId("scanner-row");
+const nRows = await rows.count();
+check(
+  "scanner lists opportunities or says honestly there are none",
+  nRows > 0 || (await page.getByTestId("scanner-empty").count()) === 1,
+  `${nRows} rows`,
+);
+if (primaryState === "neutral") {
+  const panelText = await page.getByTestId("entry-blockers").innerText();
+  check(
+    "no-trade line + best opportunity fallback",
+    panelText.includes("لا توجد فرصة مناسبة على هذا الفريم حالياً") &&
+      (await page.getByTestId("best-opportunity").count()) === 1,
+  );
+}
+if (nRows > 0) {
+  const first = rows.first();
+  const sym = await first.getAttribute("data-symbol");
+  const tf = await first.getAttribute("data-timeframe");
+  await first.click();
+  const opened = await page
+    .waitForFunction(
+      ([s, t]) => {
+        const raw = localStorage.getItem("wesetrade.charts");
+        const sel = raw ? JSON.parse(raw).state?.charts?.primary : null;
+        return sel?.symbol === s && sel?.timeframe === t;
+      },
+      [sym, tf],
+      { timeout: 15_000 },
+    )
+    .then(() => true)
+    .catch(() => false);
+  check(`scanner click opens ${sym} ${tf} on the focused chart`, opened);
+  await page.waitForFunction(
+    () => document.querySelector('[data-testid="signal-badge"]') !== null,
+    null,
+    { timeout: 30_000 },
+  );
+  const tierOk =
+    (await page.getByTestId("signal-tier").count()) === 1 ||
+    (await page.getByTestId("signal-badge").getAttribute("data-decision")) === "NEUTRAL";
+  check("opened opportunity shows «جودة الفرصة» tier", tierOk);
+  await page.screenshot({ path: path.join(OUT, "01b-opportunity-1366.png") });
+  // back to the default stream for the remaining checks
+  await page.evaluate(() => {
+    localStorage.removeItem("wesetrade.charts");
+  });
+  await page.reload({ waitUntil: "networkidle" });
+  await waitReady("primary");
+  await waitReady("secondary");
+}
 const execBar = page.locator(
   'section[data-chart="secondary"] [data-testid="execution-status"]',
 );
@@ -341,7 +412,7 @@ await page.route(
       : route.continue(),
 );
 await page.route(
-  /\/api\/v1\/forward-test\/chart-signals\?symbol=ETHUSDT&timeframe=15m/,
+  /\/api\/v1\/strategy43\/chart-signals\?symbol=ETHUSDT&timeframe=15m/,
   (route) =>
     current
       ? route.fulfill({
