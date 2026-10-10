@@ -1,3 +1,5 @@
+import type { OpportunityDTO } from './strategy43';
+
 /**
  * Wire types of the execution layer (backend app.execution, `execution.update`).
  *
@@ -120,4 +122,6 @@ export interface ExecutionState {
     levels: ExecutionLevel[];
   } | null;
   micro: ExecutionMicro | null;
+  /** v1.2.1: best open Strategy 4.3 opportunity of this symbol (15m / 30m / 1h). */
+  best?: OpportunityDTO | null;
 }

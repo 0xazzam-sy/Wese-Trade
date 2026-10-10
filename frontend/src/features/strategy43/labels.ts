@@ -50,6 +50,11 @@ export function ago(seconds: number | null | undefined, now: number = Date.now()
   return `منذ ${String(Math.floor(d / 86400))} يوم`;
 }
 
+/** «30m — SELL — B — 74/100» */
+export function bestText(o: Pick<OpportunityDTO, 'timeframe' | 'side' | 'tier' | 'score'>): string {
+  return `${o.timeframe} — ${o.side} — ${o.tier} — ${String(Math.round(o.score))}/100`;
+}
+
 export function sideText(o: Pick<OpportunityDTO, 'side'>): string {
   return o.side === 'BUY' ? 'BUY — شراء' : 'SELL — بيع';
 }

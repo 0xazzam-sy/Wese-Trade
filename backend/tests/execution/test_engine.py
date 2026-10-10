@@ -77,7 +77,7 @@ def test_parent_mapping_and_conflict() -> None:
 def test_no_parent_is_no_setup() -> None:
     ev = engine.evaluate("BTCUSDT", "1m", bullish_features(), None)
     assert ev.decision is Decision.NO_SETUP and ev.plan is None
-    assert ev.headline == "لا توجد فرصة تداول مؤكدة حالياً."
+    assert ev.headline == "لا توجد فرصة أساسية مفتوحة لهذه العملة على 15m / 30m / 1h."
 
 
 def test_conflict_is_no_setup_with_reason() -> None:

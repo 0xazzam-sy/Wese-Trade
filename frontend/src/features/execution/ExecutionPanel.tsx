@@ -4,6 +4,7 @@ import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { timeframeLabel } from '@/features/analysis/lib/panelMetrics';
 import { useSymbolMap } from '@/features/markets/queries';
 import { cn } from '@/lib/cn';
+import { bestText, S43_AR } from '@/features/strategy43/labels';
 import { formatPrice } from '@/lib/marketFormat';
 import type { ChartContext } from '@/features/analysis/context/chartContext';
 import type { ChartId } from '@/stores/layoutStore';
@@ -268,12 +269,27 @@ export function ExecutionPanel({
               />
             </div>
           ) : (
-            <p
+            <div
               className="bg-sunken/60 border-line text-fg-muted rounded-lg border px-2.5 py-2 text-xs"
               data-testid="no-setup"
             >
-              {EXECUTION_AR.noSetup}
-            </p>
+              {execution?.best ? (
+                <p data-testid="execution-best-panel">
+                  {S43_AR.bestOther}{' '}
+                  <span
+                    className={cn(
+                      'ns-ltr font-semibold',
+                      execution.best.side === 'BUY' ? 'text-bull' : 'text-bear',
+                    )}
+                  >
+                    {bestText(execution.best)}
+                  </span>
+                  <span className="text-fg-subtle"> · {execution.best.state_ar}</span>
+                </p>
+              ) : (
+                <p>{ev?.headline ?? EXECUTION_AR.noSetup}</p>
+              )}
+            </div>
           )}
           <div className="grid grid-cols-2 gap-3">
             <div>

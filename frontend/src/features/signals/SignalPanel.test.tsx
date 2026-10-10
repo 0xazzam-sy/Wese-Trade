@@ -134,16 +134,14 @@ describe('SignalPanel (analysis)', () => {
     setBoth(snap15(), view({ evaluation: evaluation() }));
     expect(panel()).toHaveAttribute('data-decision', 'NEUTRAL');
     expect(screen.getByTestId('signal-badge')).toHaveTextContent('محايد');
-    expect(screen.getByTestId('decision-headline')).toHaveTextContent(
-      'لا توجد فرصة مناسبة على هذا الفريم حالياً',
-    );
+    expect(screen.getByTestId('decision-headline')).toHaveTextContent('لا توجد فرصة مناسبة حالياً');
     expect(screen.getByTestId('decision-trade')).toHaveTextContent(/^هل في صفقة؟لا$/);
     expect(screen.queryByTestId('trade-plan')).toBeNull();
     for (const abbr of ['Entry', 'SL', 'TP1', 'TP2', 'TP3', 'R:R']) {
       expect(panel().querySelector(`[data-plan="${abbr}"]`)).toBeNull();
     }
     const blockers = screen.getByTestId('entry-blockers');
-    expect(blockers).toHaveTextContent('لا توجد فرصة مناسبة على هذا الفريم حالياً');
+    expect(blockers).toHaveTextContent('لا توجد فرصة مناسبة حالياً');
     expect(screen.getByTestId('best-opportunity')).toHaveAttribute('data-empty', 'true');
     expect(blockers).toHaveTextContent('لا يوجد محفّز هيكلي على الشمعة الأخيرة');
     expect(screen.getByTestId('signal-state')).toHaveTextContent('لا يوجد محفّز هيكلي');
@@ -359,13 +357,10 @@ describe('SignalPanel (analysis)', () => {
         },
       }),
     );
-    expect(screen.getByTestId('no-trade-line')).toHaveTextContent(
-      'لا توجد فرصة مناسبة على هذا الفريم حالياً',
-    );
+    expect(screen.getByTestId('no-trade-line')).toHaveTextContent('لا توجد فرصة مناسبة حالياً');
     const best = screen.getByTestId('best-opportunity');
     expect(best).toHaveTextContent('أفضل فرصة لهذه العملة:');
-    expect(best).toHaveTextContent('BUY — شراء');
-    expect(best).toHaveTextContent('1h');
+    expect(best).toHaveTextContent('1h — BUY — A — 78/100');
     act(() => {
       best.click();
     });

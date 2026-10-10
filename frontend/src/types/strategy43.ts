@@ -74,6 +74,15 @@ export interface EngineHealth {
   markets_scanned: number;
   timeframes: string[];
   open_opportunities: number;
+  /** v1.2.1 diagnostics */
+  timeframes_scanned?: number;
+  wait_count?: number;
+  open_trades?: number;
+  why_none?: { reason: string; streams: number }[];
+  warm?: { done: number; pending: number; failed: number };
+  warm_restored?: number;
+  last_opportunity_at?: number | null;
+  last_error?: string | null;
   open_by_tier: Record<Tier, number>;
   symbols_with_opportunity: number;
   market_status: string;

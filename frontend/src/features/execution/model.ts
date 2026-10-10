@@ -31,7 +31,7 @@ export const EXECUTION_AR = {
   reasons: 'سبب القرار',
   cautions: 'ما ينقص للدخول',
   plan: 'خطة الصفقة',
-  noSetup: 'لا توجد فرصة تداول مؤكدة حالياً.',
+  noSetup: 'لا توجد فرصة أساسية مفتوحة لهذه العملة على 15m / 30m / 1h.',
   waiting: 'بانتظار التحليل…',
   risk: 'التداول ينطوي على مخاطر — القرار والتنفيذ مسؤولية المستخدم. لا توجد نتائج مضمونة.',
   roleTitle: {
@@ -46,7 +46,7 @@ export const DECISION_TEXT: Record<ExecutionDecision, string> = {
   SELL: 'SELL — بيع',
   WAIT: 'WAIT — انتظر',
   ENTRY_MISSED: 'ENTRY MISSED — فاتت منطقة الدخول',
-  NO_SETUP: 'لا توجد فرصة حالية',
+  NO_SETUP: 'لا توجد فرصة مناسبة حالياً',
 };
 
 export const DECISION_STYLE: Record<ExecutionDecision, string> = {

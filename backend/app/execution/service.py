@@ -159,6 +159,23 @@ class ExecutionService:
                 out.append(parent_from_signal(stream.tracker.active, src.name))
         return out
 
+    def _discover_parents(self, symbol: str) -> None:
+        """An execution chart opened: make the primary engine scan this symbol on
+        15m / 30m / 1h now (warm start), so an existing parent is found immediately."""
+        watch = getattr(self.parent_source, "watch_symbol", None)
+        if watch is not None:
+            try:
+                watch(symbol)
+            except Exception:
+                logger.exception("execution.parent_discovery_failed")
+
+    def _best(self, symbol: str) -> dict[str, Any] | None:
+        best = getattr(self.parent_source, "best_for_symbol", None)
+        try:
+            return best(symbol) if best is not None else None
+        except Exception:
+            return None
+
     def _parent_state(self, parent: ParentSetup) -> str:
         for p in self.parents(parent.symbol):
             if p.signal_id == parent.signal_id:
@@ -175,6 +192,7 @@ class ExecutionService:
         if stream is None:
             stream = _Stream(key)
             self.streams[key] = stream
+            self._discover_parents(key[0])
             if self.micro is not None:
                 try:
                     self.micro.acquire(key[0])
@@ -424,6 +442,7 @@ class ExecutionService:
             "markers": [marker_payload(s) for s in stream.signals] if stream else [],
             "overlay": stream.analyzer.overlay(price) if stream and stream.analyzer.count else None,
             "micro": micro_payload(current.micro) if current else None,
+            "best": self._best(key[0]),
         }
 
     def _publish(self, stream: _Stream) -> None:
@@ -436,6 +455,7 @@ class ExecutionService:
     def subscribe(self, consumer: str, key: AppKey) -> None:
         if not self.handles(key):
             return
+        self._discover_parents(key[0])
         if key in self.streams:
             self.market.publisher.send_to(
                 [consumer], EventEnvelope.of(EventType.EXECUTION_UPDATE, self.state(key))

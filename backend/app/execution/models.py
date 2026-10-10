@@ -50,7 +50,7 @@ DECISION_AR = {
     Decision.SELL: "بيع",
     Decision.WAIT: "انتظر",
     Decision.ENTRY_MISSED: "فاتت منطقة الدخول",
-    Decision.NO_SETUP: "لا توجد فرصة حالية",
+    Decision.NO_SETUP: "لا توجد فرصة مناسبة حالياً",
 }
 STATE_AR = {
     "waiting": "بانتظار التوقيت",

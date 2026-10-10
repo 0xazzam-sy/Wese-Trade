@@ -341,7 +341,7 @@ def _score(k: dict[str, float], micro: Micro | None) -> float:
 
 def _headline(decision: Decision, d: int, zone: str, parent: ParentSetup | None) -> str:
     if decision is Decision.NO_SETUP:
-        return "لا توجد فرصة تداول مؤكدة حالياً."
+        return "لا توجد فرصة أساسية مفتوحة لهذه العملة على 15m / 30m / 1h."
     if decision is Decision.ENTRY_MISSED:
         return "فاتت منطقة الدخول — لا تلاحق السعر."
     if decision in (Decision.BUY, Decision.SELL):
@@ -380,7 +380,7 @@ def evaluate(
         why = (
             "تعارض بين إشارات الإطارات الأعلى — لا دخول حتى يتضح الاتجاه."
             if conflict
-            else "لا توجد فرصة تداول مؤكدة حالياً."
+            else "لا توجد فرصة أساسية مفتوحة لهذه العملة على 15m / 30m / 1h."
         )
         return Evaluation(
             symbol, timeframe, candle_time, Decision.NO_SETUP, 0.0, 0, None, None, (), (), why,
@@ -409,7 +409,7 @@ def evaluate(
         return Evaluation(
             symbol, timeframe, candle_time, Decision.NO_SETUP, score, d, parent, None,
             tuple(reasons), ("السعر تجاوز مستوى إبطال الفرصة",),
-            "لا توجد فرصة تداول مؤكدة حالياً.", k, micro,
+            "تجاوز السعر مستوى إبطال الفرصة الأساسية.", k, micro,
         )  # fmt: skip
     if zone == "missed":
         return Evaluation(

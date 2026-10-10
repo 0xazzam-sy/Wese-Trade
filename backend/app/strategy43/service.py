@@ -56,6 +56,8 @@ from app.strategy43.config import (
     tier,
     variant,
 )
+from app.strategy43.warm import actionable, bar_to_candle
+from app.strategy43.warm import replay as warm_replay
 from app.telegram.models import SignalAlert
 from app.websocket.events import EventEnvelope, EventType
 
@@ -67,6 +69,7 @@ LOOP_INTERVAL = 1.0
 CONTEXT_WAIT_SECONDS = 15.0
 STALE_AFTER_CLOSE_SECONDS = 120
 SUBSCRIBE_SPACING = 0.15  # gentle REST seeding at startup
+WARM_WAIT_SECONDS = 120.0  # max wait for a symbol's 15m / 30m / 1h history before warm start
 MAX_ON_DEMAND = 60
 OPEN_STATES = frozenset(
     {SignalState.CONFIRMED, SignalState.ACTIVE, SignalState.TP1_HIT, SignalState.TP2_HIT}
@@ -98,6 +101,7 @@ class _Stream:
     last_confirmed: Signal | None = None
     evaluated_at: int | None = None
     on_demand: bool = False
+    warm: str = "pending"  # pending | running | done | skipped | failed
 
 
 def _side(signal: Signal) -> int:
@@ -143,7 +147,14 @@ class Strategy43Service:
             "last_scan_at": None,  # آخر فحص للفرص
             "last_signal_at": None,  # آخر إشارة
             "last_persist_error": None,
+            "last_opportunity_at": None,  # آخر فرصة ظهرت (مؤكدة مباشرة أو مستعادة)
+            "last_error": None,
+            "last_error_at": None,
+            "warm_streams": 0,
+            "warm_restored": 0,
+            "warm_seconds": 0.0,
         }
+        self.wait_reasons: dict[AppKey, str] = {}  # why each stream has no opportunity
         self._restored: dict[tuple[str, str], list[Signal]] = {}
         self._cursors: dict[tuple[str, str], int] = {}
         self._notified: dict[str, int] = {}  # signal id -> targets already alerted
@@ -192,6 +203,7 @@ class Strategy43Service:
             for tf in TIMEFRAMES:
                 await self._subscribe((symbol, Timeframe(tf)))
                 await asyncio.sleep(SUBSCRIBE_SPACING)
+            self._spawn_warm(symbol)
         logger.info(
             "strategy43.started",
             extra={"fields": {"universe": len(self.universe), "streams": len(self.streams)}},
@@ -276,17 +288,159 @@ class Strategy43Service:
 
     def watch(self, key: AppKey) -> None:
         """A chart opened this stream: evaluate it live from now on (on-demand symbols)."""
-        if not self.owns(key) or key in self.streams or key in self._pending_subs:
+        if self.owns(key):
+            self.watch_symbol(key[0])
+
+    def watch_symbol(self, symbol: str) -> None:
+        """Evaluate this symbol on 15m / 30m / 1h now (warm start) and live from now on.
+        Used by primary charts AND by 1m / 5m / 10m charts (parent discovery)."""
+        new = [
+            (symbol, Timeframe(tf))
+            for tf in TIMEFRAMES
+            if (symbol, Timeframe(tf)) not in self.streams
+        ]
+        if not new:
             return
         if sum(1 for s in self.streams.values() if s.on_demand) >= MAX_ON_DEMAND * 3:
             return
-        symbol = key[0]
-        for tf in TIMEFRAMES:  # all three primary timeframes: best-opportunity fallback
-            k = (symbol, Timeframe(tf))
-            if k not in self.streams:
-                self._ensure(symbol, Timeframe(tf), on_demand=True)
-                self._pending_subs.add(k)
-                self._tasks.append(asyncio.ensure_future(self._subscribe(k)))
+        for k in new:
+            self._ensure(symbol, k[1], on_demand=True)
+            self._pending_subs.add(k)
+        self._tasks.append(asyncio.ensure_future(self._subscribe_symbol(symbol, new)))
+
+    async def _subscribe_symbol(self, symbol: str, keys: list[AppKey]) -> None:
+        for k in keys:
+            await self._subscribe(k)
+        self._spawn_warm(symbol)
+
+    # --- warm-start opportunity restore ----------------------------------------------------
+    def _spawn_warm(self, symbol: str) -> None:
+        self._tasks.append(asyncio.ensure_future(self.warm_start(symbol)))
+
+    def _ready_analyzers(self, symbol: str) -> bool:
+        keys = {(symbol, Timeframe(tf)) for tf in TIMEFRAMES}
+        for tf in TIMEFRAMES:
+            keys |= {(symbol, c) for c in context_timeframes(Timeframe(tf))}
+        return all((a := self.analysis.analyzer(k)) is not None and len(a.series) > 0 for k in keys)
+
+    async def warm_start(self, symbol: str, *, wait_seconds: float = WARM_WAIT_SECONDS) -> int:
+        """Replay recent closed history of 15m / 30m / 1h and restore still-actionable
+        opportunities (no Telegram). Returns the number of restored opportunities."""
+        waited = 0.0
+        while not self._ready_analyzers(symbol):
+            if waited >= wait_seconds:
+                for tf in TIMEFRAMES:
+                    st = self.streams.get((symbol, Timeframe(tf)))
+                    if st is not None and st.warm == "pending":
+                        st.warm = "failed"
+                self._error(f"warm start {symbol}: market history not ready")
+                return 0
+            await asyncio.sleep(0.5)
+            waited += 0.5
+        restored = 0
+        for tf_value in TIMEFRAMES:
+            tf = Timeframe(tf_value)
+            stream = self.streams.get((symbol, tf))
+            if stream is None or stream.warm not in ("pending", "failed"):
+                continue
+            if stream.tracker.active is not None:  # restored from the database (live signal)
+                stream.warm = "skipped"
+                continue
+            stream.warm = "running"
+            try:
+                restored += await self._warm_stream(stream)
+                stream.warm = "done"
+            except Exception as exc:
+                stream.warm = "failed"
+                self._error(f"warm start {symbol} {tf_value}: {exc!r}")
+                logger.exception("strategy43.warm_failed")
+        return restored
+
+    async def _warm_stream(self, stream: _Stream) -> int:
+        symbol, tf = stream.key
+        analyzer = self.analysis.analyzer(stream.key)
+        if analyzer is None or not len(analyzer.series):
+            return 0
+        candles = [bar_to_candle(b, symbol, tf) for b in analyzer.series.tail(len(analyzer.series))]
+        context: dict[Timeframe, list[Any]] = {}
+        for c in context_timeframes(tf):
+            ca = self.analysis.analyzer((symbol, c))
+            bars = ca.series.tail(len(ca.series)) if ca is not None else []
+            context[c] = [bar_to_candle(b, symbol, c) for b in bars]
+        started = time.monotonic()
+        result = await asyncio.to_thread(
+            warm_replay,
+            symbol,
+            tf,
+            analyzer.tick,
+            candles,
+            context,
+            variant=self.variant,
+            config=self.tracker_config,
+            version=self.version,
+        )
+        self.stats["warm_seconds"] = round(
+            self.stats["warm_seconds"] + time.monotonic() - started, 2
+        )
+        self.stats["warm_streams"] += 1
+        if stream.tracker.active is not None:  # a live signal confirmed meanwhile: keep it
+            return 0
+        tracker = result.tracker
+        live = self.analysis.analyzer(stream.key)
+        if live is not None and len(live.series):
+            for bar in live.series.tail(len(live.series)):
+                if bar.close_time > result.last_close:
+                    tracker.on_bar(bar)  # closed while replaying: lifecycle only
+        tracker.sink = self._sink(stream.key)
+        stream.tracker = tracker
+        stream.cursor = max(stream.cursor or 0, result.last_close)
+        if result.last_evaluation is not None and stream.current is None:
+            stream.current = result.last_evaluation
+            stream.evaluated_at = int(self.clock())
+            self._note_wait(stream.key, result.last_evaluation)
+        signal = tracker.active
+        restored = 0
+        price = live.series.last.close if live is not None and len(live.series) else None
+        if signal is not None and actionable(signal, price) and self._fresh(stream.key):
+            signal.evidence = {**signal.evidence, "warm_start": True}
+            stream.last_confirmed = signal
+            self._persist(signal)
+            self.stats["warm_restored"] += 1
+            self.stats["last_opportunity_at"] = int(self.clock())
+            restored = 1
+            logger.info(
+                "strategy43.warm_restored",
+                extra={
+                    "fields": {
+                        "id": signal.id,
+                        "symbol": symbol,
+                        "timeframe": tf.value,
+                        "side": signal.side.value,
+                        "score": round(signal.score, 1),
+                        "state": signal.state.value,
+                    }
+                },
+            )
+        self._publish(stream.key, EventType.SIGNAL_UPDATED, self.state(stream.key))
+        return restored
+
+    def _fresh(self, key: AppKey) -> bool:
+        """Market data is current: the last closed candle closed within one step + grace."""
+        live = self.analysis.analyzer(key)
+        if live is None or not len(live.series):
+            return False
+        age = self.clock() - live.series.last.close_time
+        return age <= key[1].seconds + STALE_AFTER_CLOSE_SECONDS
+
+    def _error(self, text: str) -> None:
+        self.stats["last_error"] = text[:300]
+        self.stats["last_error_at"] = int(self.clock())
+
+    def _note_wait(self, key: AppKey, ev: SignalEvaluation) -> None:
+        if ev.is_trade:
+            self.wait_reasons.pop(key, None)
+        else:
+            self.wait_reasons[key] = ev.neutral_reason or "لا يوجد إعداد مؤهل"
 
     # --- AnalysisListener -------------------------------------------------------------------
     def on_seeded(self, key: AppKey, analyzer: MarketAnalyzer) -> None:
@@ -382,6 +536,7 @@ class Strategy43Service:
         self.stats["last_scan_at"] = now
         stream.evaluated_at = now
         stream.current = ev
+        self._note_wait(stream.key, ev)
         stream.tracker.on_evaluation(ev, analyzer.series.last)
         self._publish(stream.key, EventType.SIGNAL_UPDATED, {"evaluation": self._ev_payload(ev)})
 
@@ -392,6 +547,7 @@ class Strategy43Service:
             if kind == "confirmed":
                 self.stats["confirmed"] += 1
                 self.stats["last_signal_at"] = signal.confirmed_time
+                self.stats["last_opportunity_at"] = int(self.clock())
                 if stream is not None:
                     stream.last_confirmed = signal
             self._persist(signal)
@@ -460,8 +616,8 @@ class Strategy43Service:
         )
 
     def _alert(self, kind: str, signal: Signal) -> None:
-        if self.alerts is None:
-            return
+        if self.alerts is None or signal.evidence.get("warm_start"):
+            return  # restored from history: shown in the UI, never pushed as a new alert
         events: list[str] = []
         if kind == "confirmed":
             events.append("NEW")
@@ -556,11 +712,30 @@ class Strategy43Service:
 
     # --- scanner ----------------------------------------------------------------------------------
     def open_signals(self) -> list[Signal]:
+        """Every open 4.3 signal (including trades already past TP1)."""
         return [
             s.tracker.active
             for s in self.streams.values()
             if s.tracker.active is not None and s.tracker.active.state in OPEN_STATES
         ]
+
+    def _price(self, key: AppKey) -> float | None:
+        a = self.analysis.analyzer(key)
+        return a.series.last.close if a is not None and len(a.series) else None
+
+    def actionable_signals(self) -> list[Signal]:
+        """Opportunities the user can still act on now (scanner / best / counts)."""
+        out = []
+        for key, st in self.streams.items():
+            sig = st.tracker.active
+            if (
+                sig is not None
+                and sig.state in OPEN_STATES
+                and self._fresh(key)  # never advertise from stale market data
+                and actionable(sig, self._price(key))
+            ):
+                out.append(sig)
+        return out
 
     def opportunity(self, signal: Signal) -> dict[str, Any]:
         t = tier(signal.score)
@@ -605,12 +780,12 @@ class Strategy43Service:
     def opportunities(self, limit: int = 20) -> list[dict[str, Any]]:
         """«أفضل الفرص الآن»: open confirmed 4.3 signals, best first."""
         now = self.clock()
-        ranked = sorted(self.open_signals(), key=lambda s: self._rank(s, now), reverse=True)
+        ranked = sorted(self.actionable_signals(), key=lambda s: self._rank(s, now), reverse=True)
         return [self.opportunity(s) for s in ranked[:limit]]
 
     def best_for_symbol(self, symbol: str) -> dict[str, Any] | None:
         now = self.clock()
-        mine = [s for s in self.open_signals() if s.symbol == symbol]
+        mine = [s for s in self.actionable_signals() if s.symbol == symbol]
         if not mine:
             return None
         return self.opportunity(max(mine, key=lambda s: self._rank(s, now)))
@@ -668,15 +843,31 @@ class Strategy43Service:
         state = "stopped" if not running else "starting" if not self.ready else "running"
         if state == "running" and problems:
             state = "degraded"
-        opens = self.open_signals()
+        opens = self.actionable_signals()
         tiers: dict[str, int] = {"A+": 0, "A": 0, "B": 0, "C": 0}
         for s in opens:
             tiers[tier(s.score)] += 1
         waiting = sum(
             1 for s in self.streams.values() if s.current is not None and s.tracker.active is None
         )
+        reasons: dict[str, int] = {}
+        for key, why in self.wait_reasons.items():
+            st = self.streams.get(key)
+            if st is not None and st.tracker.active is None:
+                reasons[why] = reasons.get(why, 0) + 1
+        top = sorted(reasons.items(), key=lambda kv: -kv[1])[:5]
+        warm = [s.warm for s in self.streams.values()]
         return {
             "state": state,
+            "timeframes_scanned": sum(1 for s in self.streams.values() if s.evaluated_at),
+            "wait_count": waiting,
+            "open_trades": len(self.open_signals()),
+            "why_none": [{"reason": r, "streams": n} for r, n in top],
+            "warm": {
+                "done": warm.count("done") + warm.count("skipped"),
+                "pending": warm.count("pending") + warm.count("running"),
+                "failed": warm.count("failed"),
+            },
             "state_ar": {
                 "running": "نشط",
                 "starting": "قيد التشغيل",

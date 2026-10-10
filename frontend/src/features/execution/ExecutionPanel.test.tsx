@@ -86,8 +86,10 @@ describe('ExecutionPanel (1m / 5m / 10m entry timing)', () => {
   it('NO SETUP: no plan, no fabricated BUY/SELL, analysis still described', () => {
     render(<SignalPanel />);
     show(execState('NO_SETUP'));
-    expect(screen.getByTestId('signal-badge')).toHaveTextContent('لا توجد فرصة حالية');
-    expect(screen.getByTestId('no-setup')).toHaveTextContent('لا توجد فرصة تداول مؤكدة حالياً.');
+    expect(screen.getByTestId('signal-badge')).toHaveTextContent('لا توجد فرصة مناسبة حالياً');
+    expect(screen.getByTestId('no-setup')).toHaveTextContent(
+      'لا توجد فرصة أساسية مفتوحة لهذه العملة على 15m / 30m / 1h.',
+    );
     expect(screen.queryByTestId('trade-plan')).toBeNull();
     expect(screen.getByTestId('execution-technical')).toHaveTextContent('دعم / مقاومة');
   });
@@ -110,7 +112,7 @@ describe('ExecutionPanel (1m / 5m / 10m entry timing)', () => {
     act(() => {
       useChartStore.getState().setSymbol('primary', 'BTCUSDT'); // switched, late ETH data
     });
-    expect(screen.getByTestId('signal-badge')).toHaveTextContent('لا توجد فرصة حالية');
+    expect(screen.getByTestId('signal-badge')).toHaveTextContent('لا توجد فرصة مناسبة حالياً');
     expect(screen.queryByTestId('trade-plan')).toBeNull();
   });
 });

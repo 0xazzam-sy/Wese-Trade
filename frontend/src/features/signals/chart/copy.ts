@@ -2,7 +2,7 @@
 export const CHART_SIGNAL_AR = {
   question: 'موقف النظام الآن',
   neutral: 'محايد',
-  neutralDetail: 'لا توجد فرصة مناسبة على هذا الفريم حالياً',
+  neutralDetail: 'لا توجد فرصة مناسبة حالياً',
   buy: 'BUY — شراء',
   sell: 'SELL — بيع',
   enabled: 'Strategy 4.3',

@@ -51,7 +51,7 @@ describe('ChartSignalStatus («شو موقف النظام هلق؟»)', () => {
     const status = screen.getByTestId('chart-signal-status');
     expect(status).toHaveAttribute('data-state', 'neutral');
     expect(screen.getByTestId('chart-signal-chip')).toHaveTextContent(/^محايد$/);
-    expect(status).toHaveTextContent('لا توجد فرصة مناسبة على هذا الفريم حالياً');
+    expect(status).toHaveTextContent('لا توجد فرصة مناسبة حالياً');
     expect(screen.getByTestId('chart-signal-scope')).toHaveTextContent('Strategy 4.3');
   });
 

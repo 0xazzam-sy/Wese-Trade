@@ -24,10 +24,22 @@ export function EngineStatusCard({ detailed = false }: { detailed?: boolean }) {
         [S43_AR.lastScan, ago(data.last_scan_at)],
         [S43_AR.lastSignal, ago(data.last_signal_at)],
         [S43_AR.openCount, String(data.open_opportunities)],
+        [
+          'A+ / A / B / C',
+          `${String(data.open_by_tier['A+'])} / ${String(data.open_by_tier.A)} / ${String(
+            data.open_by_tier.B,
+          )} / ${String(data.open_by_tier.C)}`,
+        ],
+        ['الأسواق المفحوصة', `${String(data.markets_scanned)} / ${String(data.universe_size)}`],
         [S43_AR.todayCount, String(data.signals?.today?.total ?? 0)],
+        ['محرك توقيت الدخول', data.execution ? 'نشط' : '--'],
         [
           S43_AR.telegram,
           data.telegram ? (TELEGRAM_STATE_AR[data.telegram.state] ?? data.telegram.state) : '--',
+        ],
+        [
+          'آخر إرسال Telegram',
+          data.telegram?.last_sent_at ? ago(Date.parse(data.telegram.last_sent_at) / 1000) : '--',
         ],
       ]
     : [];
@@ -71,6 +83,23 @@ export function EngineStatusCard({ detailed = false }: { detailed?: boolean }) {
               </div>
             ))}
           </dl>
+          {data.open_opportunities === 0 && (data.why_none?.length ?? 0) > 0 && (
+            <div className="text-fg-subtle text-2xs mt-1.5" data-testid="engine-why-none">
+              <p>لماذا لا توجد فرص الآن:</p>
+              <ul>
+                {data.why_none?.slice(0, 3).map((w) => (
+                  <li key={w.reason}>
+                    • {w.reason} ({w.streams})
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {(data.warm?.pending ?? 0) > 0 && (
+            <p className="text-fg-subtle text-2xs mt-1" data-testid="engine-warming">
+              جارٍ تحليل الشموع الأخيرة لاستعادة الفرص الحالية… ({data.warm?.pending})
+            </p>
+          )}
           {data.problems.length > 0 && (
             <ul className="text-warning text-2xs mt-1.5 flex flex-col gap-0.5" role="alert">
               {data.problems.map((p) => (

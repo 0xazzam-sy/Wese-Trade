@@ -1,4 +1,5 @@
 import { cn } from '@/lib/cn';
+import { bestText, S43_AR } from '@/features/strategy43/labels';
 import { formatPrice } from '@/lib/marketFormat';
 import { ChartLegend } from '@/features/signals/chart/ChartLegend';
 import type { ExecutionState } from '@/types/execution';
@@ -70,7 +71,21 @@ export function ExecutionStatus({
         </>
       ) : (
         <span className="text-fg-muted min-w-0 truncate" data-testid="execution-headline">
-          {ev?.headline ?? EXECUTION_AR.noSetup}
+          {decision === 'NO_SETUP' && state?.best ? (
+            <span data-testid="execution-best">
+              {S43_AR.bestOther}{' '}
+              <span
+                className={cn(
+                  'ns-ltr font-semibold',
+                  state.best.side === 'BUY' ? 'text-bull' : 'text-bear',
+                )}
+              >
+                {bestText(state.best)}
+              </span>
+            </span>
+          ) : (
+            (ev?.headline ?? EXECUTION_AR.noSetup)
+          )}
         </span>
       )}
       <span className="ms-auto flex min-w-0 shrink items-center gap-2">

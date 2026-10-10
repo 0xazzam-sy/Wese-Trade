@@ -76,7 +76,7 @@ export interface Explanation {
   display: SignalDisplay;
 }
 
-export const NO_ENTRY_TEXT = 'لا توجد فرصة مناسبة على هذا الفريم حالياً';
+export const NO_ENTRY_TEXT = 'لا توجد فرصة مناسبة حالياً';
 export const OUT_OF_SCOPE_TEXT = 'الفرص الأساسية تصدر على 15m و30m و1h — هذا الفريم لتوقيت الدخول.';
 export const SCORE_LABEL = 'قوة الإشارة';
 export const SCORE_TOOLTIP = 'قوة الإشارة تقيس توافق أدلة السوق من 100 وليست احتمال نجاح الصفقة.';
@@ -476,7 +476,7 @@ export function explain(
   } else if (researchOnly) {
     decisionLabel = 'محايد';
     tradeLine = 'لا';
-    headline = 'لا توجد فرصة تداول مؤكدة حالياً.';
+    headline = NO_ENTRY_TEXT;
     reason = bias
       ? `${BIAS_AR[bias]} حسب الاتجاه والهيكل — لا توجد فرصة مؤكدة.`
       : 'التحليل غير جاهز بعد.';
