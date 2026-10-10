@@ -39,6 +39,10 @@ on:
         description: "Publish the existing validated draft (re-verifies checksums)"
         type: boolean
         default: false
+      replace_unreleased_tag:
+        description: "With create_tag_at: replace an existing tag ONLY if no release (draft or published) uses it"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -65,7 +69,17 @@ jobs:
           version="$(python3 -c 'import json;print(json.load(open("desktop/src-tauri/tauri.conf.json"))["version"])')"
           [ "v$version" = "$TAG" ] || { echo "::error::tag $TAG != app version $version"; exit 1; }
           if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
-            echo "::error::tag $TAG already exists"; exit 1
+            if [ "${{ inputs.replace_unreleased_tag }}" != "true" ]; then
+              echo "::error::tag $TAG already exists"; exit 1
+            fi
+            # a tag that any release (draft or published) uses is never moved
+            used="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+              --jq "[.[] | select(.tag_name == \"$TAG\")] | length")"
+            if [ "$used" != "0" ]; then
+              echo "::error::tag $TAG is used by a release; refusing to move it"; exit 1
+            fi
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$TAG"
+            echo "replaced unreleased tag $TAG"
           fi
           # REST API (an annotated tag object + its ref): a git push of a ref whose history
           # touches .github/workflows is refused for the workflow token.
