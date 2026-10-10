@@ -27,7 +27,7 @@ from app.models.strategy43 import Strategy43SignalRecord
 from app.research import s43_report
 from app.research.collect import collect
 from app.research.simulate import evaluation
-from app.signal_engine.enums import SignalState
+from app.signal_engine.enums import Side, SignalClass, SignalState
 from app.signal_engine.lifecycle import SignalTracker
 from app.signal_engine.models import Signal
 from app.strategy43 import config as s43config
@@ -134,7 +134,10 @@ def test_research_report_and_live_evaluator_produce_the_same_signals() -> None:
 # --- actionable rules ---
 def _signal(state: SignalState, *, price_entry: float = 100.0, hits: int = 0) -> Any:
     plan = SimpleNamespace(
-        preferred_entry=100.0, stop=98.0, targets=(SimpleNamespace(price=104.0),) * 3
+        preferred_entry=100.0,
+        stop=98.0,
+        invalidation=98.0,
+        targets=(SimpleNamespace(price=104.0),) * 3,
     )
     return SimpleNamespace(
         state=state, targets_hit=hits, side=SimpleNamespace(sign=1), entry_price=price_entry,
@@ -143,9 +146,12 @@ def _signal(state: SignalState, *, price_entry: float = 100.0, hits: int = 0) ->
 
 
 def test_actionable_rules() -> None:
+    # same rule as the execution layer: <= 0.6R beyond entry and R:R to TP1 >= 0.8
     assert actionable(_signal(SignalState.CONFIRMED), None)  # waiting for entry
-    assert actionable(_signal(SignalState.ACTIVE), 101.0)  # entered, 25% to TP1
-    assert not actionable(_signal(SignalState.ACTIVE), 103.0)  # 75% to TP1: entry missed
+    assert actionable(_signal(SignalState.CONFIRMED), 100.5)
+    assert actionable(_signal(SignalState.ACTIVE), 101.0)  # 0.5R in, R:R to TP1 1.0
+    assert not actionable(_signal(SignalState.ACTIVE), 101.3)  # 0.65R in: entry missed
+    assert not actionable(_signal(SignalState.ACTIVE), 103.0)  # 1.5R in: entry missed
     assert not actionable(_signal(SignalState.ACTIVE), 97.5)  # beyond the stop
     assert not actionable(_signal(SignalState.TP1_HIT, hits=1), 101.0)  # TP1 done
     for final in (SignalState.EXPIRED, SignalState.INVALIDATED, SignalState.STOPPED):
@@ -153,6 +159,25 @@ def test_actionable_rules() -> None:
 
 
 # --- warm-start service ---
+def _realistic(buy_at: set[int], zone_offset: float | None) -> Any:
+    """The shared deterministic stub, with structural-looking targets (2R / 3R / 4R)
+    instead of 1R / 2R / 3R, like real Strategy 4.3 plans (TP1 >= ~1.2R)."""
+    base = stub_evaluator(buy_at, zone_offset=zone_offset)
+
+    def evaluate(*args: Any, **kwargs: Any) -> Any:
+        ev = base(*args, **kwargs)
+        if ev.plan is None:
+            return ev
+        e, r = ev.plan.preferred_entry, ev.plan.risk
+        targets = tuple(
+            replace(t, price=e + k * r, rr=float(k))
+            for t, k in zip(ev.plan.targets, (2, 3, 4), strict=True)
+        )
+        return replace(ev, plan=replace(ev.plan, targets=targets))
+
+    return evaluate
+
+
 def _analyzers(n15: int = 400) -> dict[Any, MarketAnalyzer]:
     out = {}
     for tf, n in ((Timeframe.M15, n15), (Timeframe.M30, 150), (Timeframe.H1, 90)):
@@ -169,11 +194,9 @@ async def _service(
     buy_at: set[int],
     *,
     alerts: list[SignalAlert] | None = None,
-    zone_offset: float | None = 5.0,
+    zone_offset: float | None = 0.3,
 ) -> tuple[Strategy43Service, FakeAnalysis, list[float]]:
-    monkeypatch.setattr(
-        "app.strategy43.warm.evaluate_candle", stub_evaluator(buy_at, zone_offset=zone_offset)
-    )
+    monkeypatch.setattr("app.strategy43.warm.evaluate_candle", _realistic(buy_at, zone_offset))
     analysis, market, clock = FakeAnalysis(), FakeMarket(), [0.0]
     analysis.analyzers.update(_analyzers())
     sink = alerts.append if alerts is not None else None
@@ -198,13 +221,13 @@ async def test_warm_start_restores_an_actionable_opportunity_without_telegram(
     database: Database, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     alerts: list[SignalAlert] = []
-    service, *_ = await _service(database, monkeypatch, {398}, alerts=alerts)
+    service, *_ = await _service(database, monkeypatch, {399}, alerts=alerts)
     assert service.opportunities() == []  # before: the v1.2.0 symptom
     assert await service.warm_start(SYMBOL, wait_seconds=1) == 1
     await service.flush()
     [opp] = service.opportunities()  # scanner populated immediately
     assert opp["symbol"] == SYMBOL and opp["timeframe"] == "15m" and opp["side"] == "BUY"
-    assert opp["state"] == "confirmed" and opp["tier"] == "A"
+    assert opp["state"] in ("confirmed", "active") and opp["tier"] == "A"
     assert service.best_for_symbol(SYMBOL)["id"] == opp["id"]  # type: ignore[index]
     assert alerts == []  # restored from history: never pushed as a new alert
     async with database.session_factory() as s:
@@ -220,7 +243,8 @@ async def test_warm_start_restores_an_actionable_opportunity_without_telegram(
 async def test_expired_setup_is_not_restored(
     database: Database, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    service, *_ = await _service(database, monkeypatch, {370})  # entry window long gone
+    # a deep limit that is never filled: the entry window passes -> EXPIRED
+    service, *_ = await _service(database, monkeypatch, {370}, zone_offset=5.0)
     assert await service.warm_start(SYMBOL, wait_seconds=1) == 0
     assert service.opportunities() == []
     tracker = service.streams[(SYMBOL, Timeframe.M15)].tracker
@@ -232,7 +256,7 @@ async def test_expired_setup_is_not_restored(
 async def test_stale_market_data_is_not_restored(
     database: Database, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    service, _analysis, clock = await _service(database, monkeypatch, {398})
+    service, _analysis, clock = await _service(database, monkeypatch, {399})
     clock[0] += 3 * 3600  # last closed candle is hours old
     assert await service.warm_start(SYMBOL, wait_seconds=1) == 0
     assert service.opportunities() == []
@@ -242,7 +266,7 @@ async def test_stale_market_data_is_not_restored(
 async def test_parent_is_found_by_execution_charts_and_survives_restart(
     database: Database, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    service, analysis, _clock = await _service(database, monkeypatch, {398})
+    service, analysis, _clock = await _service(database, monkeypatch, {399})
     await service.warm_start(SYMBOL, wait_seconds=1)
     await service.flush()
     [opp] = service.opportunities()
@@ -267,7 +291,7 @@ async def test_parent_is_found_by_execution_charts_and_survives_restart(
 async def test_selected_symbol_is_scanned_immediately(
     database: Database, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    service, analysis, _ = await _service(database, monkeypatch, {398})
+    service, analysis, _ = await _service(database, monkeypatch, {399})
     other = "MAGICUSDT"
     for (_sym, tf), a in _analyzers().items():
         b = MarketAnalyzer(other, tf, tick_size=0.01)
@@ -286,9 +310,40 @@ async def test_selected_symbol_is_scanned_immediately(
 
 
 # --- 8. live signal -> Telegram, no duplicate after restart ---
-async def test_live_signal_reaches_telegram_once_even_after_restart(
-    database: Database, monkeypatch: pytest.MonkeyPatch
+def _sided(buy_at: set[int], side: str) -> Any:
+    """Deterministic live evaluator: BUY as the shared stub, or its exact mirror (SELL)."""
+    base = _realistic(buy_at, None)
+    if side == "BUY":
+        return base
+
+    def evaluate(*args: Any, **kwargs: Any) -> Any:
+        ev = base(*args, **kwargs)
+        if ev.plan is None or ev.hypothesis is None:
+            return ev
+        p = ev.plan
+        e = p.preferred_entry
+        mirror = replace(
+            p,
+            entry_low=e,
+            entry_high=e,
+            stop=e + p.risk,
+            invalidation=e + p.risk,
+            targets=tuple(replace(t, price=2 * e - t.price) for t in p.targets),
+        )
+        hyp = replace(ev.hypothesis, side=Side.SHORT)
+        return replace(ev, side=Side.SHORT, signal_class=SignalClass.SELL, plan=mirror,
+                       hypothesis=hyp)  # fmt: skip
+
+    return evaluate
+
+
+@pytest.mark.parametrize("side", ["BUY", "SELL"])
+async def test_one_signal_id_end_to_end_to_telegram(
+    database: Database, monkeypatch: pytest.MonkeyPatch, side: str
 ) -> None:
+    """Evaluator -> persisted signal -> execution parent -> UI payload -> Telegram SENT,
+    all with the SAME signal id; never resent after a restart."""
+
     async def no_sleep(_: float) -> None:
         return None
 
@@ -298,28 +353,43 @@ async def test_live_signal_reaches_telegram_once_even_after_restart(
     await tg.start()
     await tg.set_token(TOKEN)
     await tg.add_recipient({"name": "Azzam", "chat_id": "5002606147"})
-    monkeypatch.setattr("app.strategy43.service.evaluate_candle", stub_evaluator({401}))
+    monkeypatch.setattr("app.strategy43.service.evaluate_candle", _sided({401}, side))
     service, analysis, clock = await _service(database, monkeypatch, set())
     service.alerts = tg.notify
     key = (SYMBOL, Timeframe.M15)
     analyzer = analysis.analyzers[key]
     service.on_seeded(key, analyzer)
-    for c in candles(403)[400:402]:  # two live closes; BUY confirmed on bar 401
+    for c in candles(403)[400:402]:  # two live closes; the setup confirms on bar 401
         analyzer.update(c)
         clock[0] = analyzer.series.last.close_time + 5
         service.on_closed(key, analyzer)
     await service.flush()
     await tg.drain()
     [signal] = service.open_signals()
-    assert len(FakeBot.sent) == 1 and "BUY — شراء" in FakeBot.sent[0][1]
+    sid = signal.id
+    assert signal.side.value == ("long" if side == "BUY" else "short")
+    # persisted
     async with database.session_factory() as s:
-        row = await s.get(Strategy43SignalRecord, signal.id)
-    assert row is not None  # the SAME id persisted, published and delivered
+        assert (await s.get(Strategy43SignalRecord, sid)) is not None
+    # execution layer parent (15m -> 1m / 5m)
+    execution = ExecutionService(analysis, FakeMarket(), database, service)  # type: ignore[arg-type]
+    assert [p.signal_id for p in execution.parents(SYMBOL)] == [sid]
+    # frontend payloads (chart state + scanner)
+    assert service.state(key)["active"]["id"] == sid
+    assert [o["id"] for o in service.opportunities()] == [sid]
+    assert service.opportunities()[0]["side"] == side
+    # Telegram SENT, with the same id
+    log = await tg.deliveries()
+    assert [(d["signal_id"], d["event"], d["status"]) for d in log] == [(sid, "NEW", "sent")]
+    assert (
+        len(FakeBot.sent) == 1
+        and ("BUY — شراء" if side == "BUY" else "SELL — بيع") in (FakeBot.sent[0][1])
+    )
     await tg.stop()
     await service.stop()
     tg2 = TelegramService(database, "k" * 48, client_factory=FakeBot, sleep=no_sleep)  # type: ignore[arg-type]
     await tg2.start()
-    tg2.notify(replace(service.alert_for(signal, "NEW")))
+    tg2.notify(service.alert_for(signal, "NEW"))
     await tg2.drain()
     assert len(FakeBot.sent) == 1  # never resent after restart
     await tg2.stop()

@@ -210,6 +210,28 @@ confirm. The stop counts first when stop and target fall in one candle.
   | 30m | 5m, 10m |
   | 1h | 10m |
 
+## 5b. Warm-start opportunity restore (v1.2.1)
+
+- **What changed:** v1.2.0 treated seeded history as warm-up only, so the live engine had
+  no state until a new candle confirmed a setup, often hours after every start. From
+  v1.2.1, at startup (and when any chart opens a symbol), the recent closed history of
+  15m / 30m / 1h is replayed through **the same live evaluator** (`evaluate_candle`) and
+  `SignalTracker` (`app/strategy43/warm.py`).
+- **What is restored:** only setups that are still actionable now, judged by the
+  execution layer's own entry rules:
+  - waiting for entry, or entered without a target hit;
+  - at most 0.6R beyond the planned entry;
+  - R:R to TP1 ≥ 0.8;
+  - not past the stop or invalidation;
+  - fresh market data.
+- **What is never restored:** expired, invalidated, stopped or TP-hit setups.
+- **Telegram:** restored signals are persisted with `warm_start` and are **never** sent
+  as new alerts.
+- **Parity:** `tests/strategy43/test_warm_parity.py` replays real ETH-USDT candles through
+  the research/report path and through the production path, and requires identical
+  signals (ids, sides, scores, states, plans). It also pins the production config to the
+  published version above.
+
 ## 6. Reproduce
 
 ```

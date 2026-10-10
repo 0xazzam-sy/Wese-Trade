@@ -27,6 +27,7 @@ from app.analysis.config import DEFAULT_CONFIG as ANALYSIS_CONFIG
 from app.analysis.engine import MarketAnalyzer
 from app.analysis.multi_timeframe.context import context_timeframes
 from app.analysis.series import Bar
+from app.execution.engine import MISSED_PROGRESS_R, MISSED_RR_TP1
 from app.forward_test.evaluate import LiveContext, evaluate_candle
 from app.market_data.models import Candle
 from app.market_data.timeframes import Timeframe
@@ -40,9 +41,8 @@ from app.signal_engine.models import Signal, SignalEvaluation
 # > max hold (96) + entry window + cooldown, so the final tracker state equals a replay
 # of the full history (a trade opened earlier is closed by its time stop by then).
 EVALUATE_LAST = 160
-# An entered (ACTIVE) trade is still a usable opportunity only while price has not
-# travelled more than this share of the way from entry to TP1.
-ACTIVE_MAX_PROGRESS = 0.5
+# Actionability uses the execution layer's own entry rules (1m / 5m / 10m) so the scanner
+# never lists what the execution charts would call ENTRY MISSED or invalid.
 
 
 def bar_to_candle(bar: Bar, symbol: str, tf: Timeframe) -> Candle:
@@ -121,21 +121,22 @@ def replay(
 def actionable(signal: Signal, price: float | None) -> bool:
     """Can the user still act on this opportunity now?
 
-    * confirmed, waiting for the entry (the tracker already expired / invalidated it if
-      the entry window passed or the setup broke) -> yes;
-    * entered, no target hit, and price has not run more than half way to TP1 -> yes;
-    * anything else (a target already hit, closed) -> no: the entry is no longer meaningful.
+    Same location rule as the execution layer (`execution.engine._location`): the setup
+    is open (confirmed or entered, no target hit), price has not reached the invalidation /
+    stop, has not run more than MISSED_PROGRESS_R beyond the planned entry, and the
+    remaining R:R to TP1 is at least MISSED_RR_TP1. Closed, expired, invalidated or
+    TP-hit setups are never actionable.
     """
-    if signal.state is SignalState.CONFIRMED:
-        return True
-    if signal.state is not SignalState.ACTIVE or signal.targets_hit or price is None:
+    if signal.state not in (SignalState.CONFIRMED, SignalState.ACTIVE) or signal.targets_hit:
         return False
+    if price is None:
+        return signal.state is SignalState.CONFIRMED
+    plan = signal.plan
     d = signal.side.sign
-    entry = signal.entry_price or signal.plan.preferred_entry
-    tp1 = signal.plan.targets[0].price
-    span = d * (tp1 - entry)
-    if span <= 0:
+    risk = d * (plan.preferred_entry - plan.stop)
+    room = d * (price - plan.stop)
+    if risk <= 0 or room <= 0 or d * (price - plan.invalidation) <= 0:
         return False
-    progress = d * (price - entry) / span
-    beyond_stop = d * (price - signal.plan.stop) <= 0
-    return progress <= ACTIVE_MAX_PROGRESS and not beyond_stop
+    progress = d * (price - plan.preferred_entry) / risk
+    rr1 = d * (plan.targets[0].price - price) / room
+    return progress <= MISSED_PROGRESS_R and rr1 >= MISSED_RR_TP1

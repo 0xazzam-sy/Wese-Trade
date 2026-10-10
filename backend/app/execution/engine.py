@@ -1,8 +1,8 @@
-"""Execution engine: entry timing on 1m / 5m / 10m for an active Strategy 4.2 parent setup.
+"""Execution engine: entry timing on 1m / 5m / 10m for an active primary parent setup.
 
 Pure functions over closed-candle features. Hierarchy:
 
-    parent (Strategy 4.2: direction, setup, invalidation, targets)
+    parent (Strategy 4.3: direction, setup, invalidation, targets)
       -> location (is the entry zone still valid? extended? missed?)
       -> execution evidence (EMA, structure BOS/CHoCH, S/R reaction, liquidity sweep,
          momentum, candle, regime, live microstructure) -> «قوة توقيت الدخول» 0-100
@@ -400,7 +400,7 @@ def evaluate(
     k, reasons, cautions, triggers = _components(d, f, zone, micro)
     score = _score(k, micro)
     parent_reason = (
-        f"اتجاه {parent.timeframe} " + ("صاعد" if d == 1 else "هابط") + " (Strategy 4.2)"
+        f"اتجاه {parent.timeframe} " + ("صاعد" if d == 1 else "هابط") + " (Strategy 4.3)"
     )
     reasons = [parent_reason, *reasons]
     if micro is not None and micro.status == "stale":

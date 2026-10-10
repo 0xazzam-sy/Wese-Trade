@@ -383,6 +383,12 @@ class Strategy43Service:
             self.stats["warm_seconds"] + time.monotonic() - started, 2
         )
         self.stats["warm_streams"] += 1
+        now = int(self.clock())
+        self.stats["last_scan_at"] = now
+        self.stats["last_candle_close"] = max(
+            self.stats["last_candle_close"] or 0, result.last_close
+        )
+        self.stats["evaluations"] += result.evaluations
         if stream.tracker.active is not None:  # a live signal confirmed meanwhile: keep it
             return 0
         tracker = result.tracker
@@ -406,6 +412,9 @@ class Strategy43Service:
             stream.last_confirmed = signal
             self._persist(signal)
             self.stats["warm_restored"] += 1
+            self.stats["last_signal_at"] = max(
+                self.stats["last_signal_at"] or 0, signal.confirmed_time
+            )
             self.stats["last_opportunity_at"] = int(self.clock())
             restored = 1
             logger.info(
